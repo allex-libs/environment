@@ -1,0 +1,18 @@
+{
+  "name": "allex_environmentlib",
+  "version": "1.0.0",
+  "description": "AllEx environment lib",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@gitlab.hers.rs:allex_libs/environment.git"
+  },
+  "keywords": [
+    "ecosystem:allex"
+  ],
+  "author": "HERS development team",
+  "license": "MIT"
+}
