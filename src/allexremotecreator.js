@@ -63,6 +63,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
           onSink:this._onSink.bind(this, defer)
         });
       } catch(e) {
+        console.error('problem with', response.data);
         console.error(e.stack);
         console.error(e);
         //error handling
@@ -80,6 +81,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     //console.log(this.userRepresentation);
     return qlib.promise2defer(this.onEstablished(), defer);
   };
+  AllexRemoteEnvironment.prototype.type = 'allexremote';
 
 
 

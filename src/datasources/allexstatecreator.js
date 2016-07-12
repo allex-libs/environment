@@ -29,7 +29,7 @@ function createAllexStateDataSource (execlib, DataSourceBase) {
     DataSourceBase.prototype.setTarget.call(this, target);
     var h = {};
     h[name] = this.onStateData.bind(this);
-    this.monitor = sink.monitorStateForGui(h);
+    this.monitor = this.sink.monitorStateForGui(h);
   };
   AllexState.prototype.onStateData = function (data) {
     if (!this.target) {

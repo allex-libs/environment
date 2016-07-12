@@ -25,6 +25,9 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
       case 'allexhash2array':
         ctor = dataSourceRegistry.AllexHash2Array;
         break;
+      case 'allexdataquery':
+        ctor = dataSourceRegistry.AllexDataQuery;
+        break;
       default:
         throw new lib.Error('DATASOURCE_TYPE_NOT_APPLICABLE_TO_ALLEX_ENVIRONMENT', type);
     }

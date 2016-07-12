@@ -9,9 +9,14 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     Configurable.call(this, config);
     this.dataSources = new lib.Map();
     this.commands = new lib.Map();
+    this.established = new lib.HookCollection();
   }
   Configurable.addMethods(EnvironmentBase);
   EnvironmentBase.prototype.destroy = function () {
+    if (this.established) {
+      this.established.destroy();
+    }
+    this.established = null;
     if (this.commands) {
       lib.containerDestroyAll(this.commands);
       this.commands.destroy();
@@ -61,7 +66,7 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     this.dataSources.add(desc.name, this.createCommand(desc.options));
   };
   EnvironmentBase.prototype.fireEstablished = function () {
-    console.log('should fire established');
+    this.established.fire(this);
     return q(this);
   };
   EnvironmentBase.prototype.DEFAULT_CONFIG = lib.dummyFunc;
