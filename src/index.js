@@ -1,10 +1,14 @@
-function createEnvironmentFactory (execlib) {
+function createLib (execlib) {
+  return execlib.loadDependencies('client', ['allex:leveldb:lib'], createEnvironmentFactory.bind(null, execlib));
+}
+
+function createEnvironmentFactory (execlib, leveldblib) {
   'use strict';
   var dataSourceRegistry = require('./datasources')(execlib),
     EnvironmentBase = require('./basecreator')(execlib),
     UserRepresentation = require('./userrepresentationcreator')(execlib),
     AllexEnvironment = require('./allexcreator')(execlib, dataSourceRegistry, EnvironmentBase),
-    AllexRemoteEnvironment = require('./allexremotecreator')(execlib, dataSourceRegistry, AllexEnvironment, UserRepresentation);
+    AllexRemoteEnvironment = require('./allexremotecreator')(execlib, leveldblib, dataSourceRegistry, AllexEnvironment, UserRepresentation);
 
 
   function createFromConstructor (ctor, options) {
@@ -30,4 +34,4 @@ function createEnvironmentFactory (execlib) {
   return environmentFactory;
 }
 
-module.exports = createEnvironmentFactory;
+module.exports = createLib;

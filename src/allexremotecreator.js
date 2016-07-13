@@ -1,4 +1,4 @@
-function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnvironment, UserRepresentation) {
+function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, AllexEnvironment, UserRepresentation) {
   'use strict';
 
   var lib = execlib.lib,
@@ -14,6 +14,14 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.port = options.entrypoint.port;
     this.identity = options.entrypoint.identity;
     this.userRepresentation = null;
+    this.storage = null;
+    var d = q.defer();
+    d.promise.then(this.onStorage.bind(this));
+    this.set('state', 'pending');
+    this.storage = new leveldblib.LevelDBHandler({
+      starteddefer:d,
+      dbname: 'remoteenvironmentstorage'
+    });
   }
   lib.inherit(AllexRemoteEnvironment, AllexEnvironment);
   AllexRemoteEnvironment.prototype.destroy = function () {
@@ -22,7 +30,16 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     }
     this.userRepresentation = null;
   };
-  AllexRemoteEnvironment.prototype.go = function () {
+  AllexRemoteEnvironment.prototype.onStorage = function () {
+    this.storage.get('sessionid').then(
+      this.onSessionId.bind(this),
+      this.set.bind(this, 'state', 'loggedout')
+    );
+  };
+  AllexRemoteEnvironment.prototype.onSessionId = function (sessionid) {
+    console.log('sessionid', sessionid);
+  };
+  AllexRemoteEnvironment.prototype.login = function (credentials) {
     if (this.userRepresentation) {
       this.userRepresentation.destroy();
     }
@@ -30,7 +47,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     return execlib.loadDependencies('client', [
       '.',
       'allex:users'
-    ], this.sendRequest.bind(this));
+    ], this.sendRequest.bind(this, credentials));
   };
   AllexRemoteEnvironment.prototype.findSink = function (sinkname) {
     if (sinkname === '.') {
@@ -38,7 +55,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     }
     return q(this.userRepresentation.subsinks[sinkname]);
   };
-  AllexRemoteEnvironment.prototype.sendRequest = function () {
+  AllexRemoteEnvironment.prototype.sendRequest = function (credentials) {
     var d = q.defer();
     lib.request('http://'+this.address+':'+this.port+'/letMeIn', {
       parameters: {
@@ -48,6 +65,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
       onComplete: this.onResponse.bind(this, d),
       onError: d.reject.bind(d)
     });
+    credentials = null;
     return d.promise;
   }
   AllexRemoteEnvironment.prototype.onResponse = function (defer, response) {
@@ -79,7 +97,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
   AllexRemoteEnvironment.prototype._onAcquired = function (defer, sink) {
     this.userRepresentation.setSink(sink);
     //console.log(this.userRepresentation);
-    return qlib.promise2defer(this.onEstablished(), defer);
+    return qlib.promise2defer(this.set('state', 'established'), defer);
   };
   AllexRemoteEnvironment.prototype.type = 'allexremote';
 

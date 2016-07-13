@@ -3,14 +3,18 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
 
   var lib = execlib.lib,
     q = lib.q,
-    Configurable = lib.Configurable;
+    Configurable = lib.Configurable,
+    ChangeableListenable = lib.ChangeableListenable;
 
   function EnvironmentBase (config) {
+    ChangeableListenable.call(this);
     Configurable.call(this, config);
     this.dataSources = new lib.Map();
     this.commands = new lib.Map();
-    this.established = new lib.HookCollection();
+    this.state = null;
   }
+  ChangeableListenable.addMethods(EnvironmentBase);
+  lib.inherit(EnvironmentBase, ChangeableListenable);
   Configurable.addMethods(EnvironmentBase);
   EnvironmentBase.prototype.destroy = function () {
     if (this.established) {
@@ -28,6 +32,16 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     }
     this.dataSources = null;
     Configurable.prototype.destroy.call(this);
+    ChangeableListenable.prototype.destroy.call(this);
+  };
+  EnvironmentBase.prototype.set_state = function (state) {
+    if (this.state === state) {
+      return;
+    }
+    if (state === 'established') {
+      this.onEstablished();
+    }
+    this.state = state;
   };
   EnvironmentBase.prototype.onEstablished = function () {
     var ds = this.getConfigVal('datasources'),
@@ -41,9 +55,7 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
       promises = promises.concat(cs.map(this.toCommand.bind(this)));
     }
     */
-    return q.all(promises).then(
-      this.fireEstablished.bind(this)
-    );
+    return q.all(promises);
   };
   EnvironmentBase.prototype.toDataSource = function (desc) {
     if (!desc.name) {
@@ -64,10 +76,6 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
       throw new lib.JSONizingError('NO_COMMAND_NAME', desc, 'No name:');
     }
     this.dataSources.add(desc.name, this.createCommand(desc.options));
-  };
-  EnvironmentBase.prototype.fireEstablished = function () {
-    this.established.fire(this);
-    return q(this);
   };
   EnvironmentBase.prototype.DEFAULT_CONFIG = lib.dummyFunc;
 
