@@ -55,20 +55,21 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     }
     return q(this.userRepresentation.subsinks[sinkname]);
   };
-  AllexRemoteEnvironment.prototype.sendRequest = function (credentials) {
-    var d = q.defer();
+  AllexRemoteEnvironment.prototype.sendRequest = function (credentials, d) {
+    d = d || q.defer();
     lib.request('http://'+this.address+':'+this.port+'/letMeIn', {
       parameters: {
-        username: this.identity.username,
-        password: this.identity.password
+        username: credentials.username,
+        password: credentials.password
       },
       onComplete: this.onResponse.bind(this, d),
-      onError: d.reject.bind(d)
+      onError: this.onRequestFail.bind(this, credentials, d)
     });
     credentials = null;
     return d.promise;
   }
   AllexRemoteEnvironment.prototype.onResponse = function (defer, response) {
+    console.log(response);
     if (!response) {
       //error handling
     }
@@ -89,6 +90,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     }
   };
   AllexRemoteEnvironment.prototype._onSink = function (defer, sink) {
+    console.log('_onSink');
     execlib.execSuite.taskRegistry.run('acquireUserServiceSink', {
       sink: sink,
       cb: this._onAcquired.bind(this, defer)
@@ -98,6 +100,10 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     this.userRepresentation.setSink(sink);
     //console.log(this.userRepresentation);
     return qlib.promise2defer(this.set('state', 'established'), defer);
+  };
+  AllexRemoteEnvironment.prototype.onRequestFail = function (credentials, d, reason) {
+    this.set('error', reason);
+    lib.runNext(this.sendRequest.bind(this, credentials, d), lib.intervals.Second);
   };
   AllexRemoteEnvironment.prototype.type = 'allexremote';
 
