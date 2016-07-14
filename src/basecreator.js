@@ -12,15 +12,14 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     this.dataSources = new lib.Map();
     this.commands = new lib.Map();
     this.state = null;
+    this.error = null;
   }
   ChangeableListenable.addMethods(EnvironmentBase);
   lib.inherit(EnvironmentBase, ChangeableListenable);
   Configurable.addMethods(EnvironmentBase);
   EnvironmentBase.prototype.destroy = function () {
-    if (this.established) {
-      this.established.destroy();
-    }
-    this.established = null;
+    this.error = null;
+    this.state = null;
     if (this.commands) {
       lib.containerDestroyAll(this.commands);
       this.commands.destroy();
@@ -34,14 +33,23 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     Configurable.prototype.destroy.call(this);
     ChangeableListenable.prototype.destroy.call(this);
   };
+  EnvironmentBase.prototype.set_error = function (error) {
+    if (this.error === error) {
+      return false;
+    }
+    this.error = error;
+    this.set('state', 'error');
+    return true;
+  };
   EnvironmentBase.prototype.set_state = function (state) {
     if (this.state === state) {
-      return;
+      return false;
     }
     if (state === 'established') {
       this.onEstablished();
     }
     this.state = state;
+    return true;
   };
   EnvironmentBase.prototype.onEstablished = function () {
     var ds = this.getConfigVal('datasources'),
