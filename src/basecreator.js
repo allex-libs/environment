@@ -9,7 +9,7 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
   function EnvironmentBase (config) {
     ChangeableListenable.call(this);
     Configurable.call(this, config);
-    this.dataSources = new lib.Map();
+    this.dataSources = new lib.DIContainer();
     this.commands = new lib.Map();
     this.state = null;
     this.error = null;
@@ -46,10 +46,16 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
       return false;
     }
     if (state === 'established') {
-      this.onEstablished();
+      return this.onEstablished().then(
+        this.onEstablishedDone.bind(this, state)
+      );
     }
     this.state = state;
     return true;
+  };
+  EnvironmentBase.prototype.onEstablishedDone = function (state) {
+    this.state = state;
+    return q(true);
   };
   EnvironmentBase.prototype.onEstablished = function () {
     var ds = this.getConfigVal('datasources'),
@@ -66,18 +72,24 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     return q.all(promises);
   };
   EnvironmentBase.prototype.toDataSource = function (desc) {
+    var ret;
     if (!desc.name) {
       throw new lib.JSONizingError('NO_DATASOURCE_NAME', desc, 'No name:');
     }
     if (!desc.type) {
       throw new lib.JSONizingError('NO_DATASOURCE_TYPE', desc, 'No type:');
     }
-    return this.createDataSource(desc.type, desc.options).then(
-      this.onDataSourceCreated.bind(this, desc)
-    );
+    if (!this.dataSources.busy(desc.name)) {
+      ret = this.dataSources.waitFor(desc.name);
+      this.createDataSource(desc.type, desc.options).then(
+        this.onDataSourceCreated.bind(this, desc)
+      );
+    }
+    return ret || this.dataSources.waitFor(desc.name);
   };
   EnvironmentBase.prototype.onDataSourceCreated = function (desc, ds) {
-    this.dataSources.add(desc.name, ds);
+    this.dataSources.register(desc.name, ds);
+    return q(ds);
   };
   EnvironmentBase.prototype.toCommand = function (desc) {
     if (!desc.name) {
