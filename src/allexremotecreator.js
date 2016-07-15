@@ -47,7 +47,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     return execlib.loadDependencies('client', [
       '.',
       'allex:users'
-    ], this.sendRequest.bind(this, credentials));
+    ], qlib.executor(this.sendRequest.bind(this, credentials)));
   };
   AllexRemoteEnvironment.prototype.findSink = function (sinkname) {
     if (sinkname === '.') {
@@ -70,7 +70,6 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
   }
   AllexRemoteEnvironment.prototype.onResponse = function (defer, response) {
     ///TODO: raspraviti ...
-
     if (!response) {
       //error handling
     }
@@ -96,18 +95,19 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
         //error handling
       }
     }
+    defer = null;
   };
   AllexRemoteEnvironment.prototype._onSink = function (defer, sink) {
-    console.log('_onSink');
     execlib.execSuite.taskRegistry.run('acquireUserServiceSink', {
       sink: sink,
       cb: this._onAcquired.bind(this, defer)
     });
+    defer = null;
   };
   AllexRemoteEnvironment.prototype._onAcquired = function (defer, sink) {
     this.userRepresentation.setSink(sink);
     //console.log(this.userRepresentation);
-    return qlib.promise2defer(this.set('state', 'established'), defer);
+    return qlib.promise2defer(q(this.set('state', 'established')), defer);
   };
   AllexRemoteEnvironment.prototype.onRequestFail = function (credentials, d, reason) {
     this.set('error', reason);

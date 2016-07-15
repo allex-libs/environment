@@ -10,7 +10,6 @@ function createEnvironmentFactory (execlib, leveldblib) {
     AllexEnvironment = require('./allexcreator')(execlib, dataSourceRegistry, EnvironmentBase),
     AllexRemoteEnvironment = require('./allexremotecreator')(execlib, leveldblib, dataSourceRegistry, AllexEnvironment, UserRepresentation);
 
-
   function createFromConstructor (ctor, options) {
     if (lib.isFunction (ctor)) return new ctor (options);
     var _glob = 'undefined' === typeof(global) ? window : global,
