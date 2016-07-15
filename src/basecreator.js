@@ -42,6 +42,7 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     return true;
   };
   EnvironmentBase.prototype.set_state = function (state) {
+    console.log('=============>>>', state);
     if (this.state === state) {
       return false;
     }
@@ -65,6 +66,8 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     */
     return q.all(promises);
   };
+
+  EnvironmentBase.prototype.isEstablished = function () { return this.state === 'established';}
   EnvironmentBase.prototype.toDataSource = function (desc) {
     if (!desc.name) {
       throw new lib.JSONizingError('NO_DATASOURCE_NAME', desc, 'No name:');
