@@ -33,14 +33,6 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     Configurable.prototype.destroy.call(this);
     ChangeableListenable.prototype.destroy.call(this);
   };
-  EnvironmentBase.prototype.set_error = function (error) {
-    if (this.error === error) {
-      return false;
-    }
-    this.error = error;
-    this.set('state', 'error');
-    return true;
-  };
   EnvironmentBase.prototype.set_state = function (state) {
     if (this.state === state) {
       return false;
@@ -49,6 +41,8 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
       return this.onEstablished().then(
         this.onEstablishedDone.bind(this, state)
       );
+    } else {
+      this.onDeEstablished();
     }
     this.state = state;
     return true;
@@ -61,6 +55,7 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     var ds = this.getConfigVal('datasources'),
       cs = this.getConfigVal('commands'),
       promises = [];
+    this.set('error', null);
     if (lib.isArray(ds)) {
       promises = promises.concat(ds.map(this.toDataSource.bind(this)));
     }
@@ -96,6 +91,15 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
       throw new lib.JSONizingError('NO_COMMAND_NAME', desc, 'No name:');
     }
     this.dataSources.add(desc.name, this.createCommand(desc.options));
+  };
+  function unregisterer(dss, ds, dsname) {
+    dss.unregisterDestroyable(dsname);
+  }
+  EnvironmentBase.prototype.onDeEstablished = function () {
+    var dss = this.dataSources;
+    if (dss) {
+      dss.traverse(unregisterer.bind(null, dss));
+    }
   };
   EnvironmentBase.prototype.DEFAULT_CONFIG = lib.dummyFunc;
 

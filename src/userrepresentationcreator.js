@@ -237,10 +237,10 @@ function createUserRepresentation(execlib) {
     this.state = null;
   };
   DataPurger.prototype.run = function () {
-    console.log('running delitems', this.delitems);
+    //console.log('running delitems', this.delitems);
     this.delitems.forEach(this.runItem.bind(this));
     if (this._state.count>0) {
-      console.log('_state is still not empty');
+      //console.log('_state is still not empty');
       throw new lib.Error('_STATE_STILL_NOT_EMPTY', this._state.count+' items in _state still exist');
     }
     lib.destroyASAP(this);
@@ -394,7 +394,7 @@ function createUserRepresentation(execlib) {
     }
     this.stateEvents = null;
     this.subsinks = null;
-    console.log('destroying state');
+    //console.log('destroying state');
     this.state.destroy();
     this.state = null;
     this.sink = null;
@@ -409,7 +409,7 @@ function createUserRepresentation(execlib) {
     subsink.purge();
   }
   SinkRepresentation.prototype.purge = function () {
-    console.log('purging');
+    //console.log('purging');
     lib.traverseShallow(this.subsinks,subSinkRepresentationPurger);
     //this.subsinks = {}; //this looks like a baad idea...
     this.purgeState();
@@ -476,7 +476,7 @@ function createUserRepresentation(execlib) {
       this.purge();
     }
     if (!sink) {
-      console.log('no sink in setSink');
+      //console.log('no sink in setSink');
       this.sink = 0; //intentionally
       d.resolve(0);
     } else {
