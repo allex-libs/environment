@@ -91,16 +91,22 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
       this.giveUp(credentials, defer);
       return;
     }
-    if (response.data) {
+    if ('data' in response){
+      response = response.data;
+    } else if ('response' in response) {
+      response = response.response;
+    }
+
+    if (response) {
       try {
-        var response = JSON.parse(response.data);
+        var response = JSON.parse(response);
         execlib.execSuite.taskRegistry.run('acquireSink', {
           connectionString: 'ws://'+response.ipaddress+':'+response.port,
           session: response.session,
           onSink:this._onSink.bind(this, defer, response.session)
         });
       } catch(e) {
-        console.error('problem with', response.data);
+        console.error('problem with', response);
         console.error(e.stack);
         console.error(e);
         //error handling

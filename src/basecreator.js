@@ -66,6 +66,8 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     */
     return q.all(promises);
   };
+
+  EnvironmentBase.prototype.isEstablished = function () { return this.state === 'established';}
   EnvironmentBase.prototype.toDataSource = function (desc) {
     var ret;
     if (!desc.name) {
