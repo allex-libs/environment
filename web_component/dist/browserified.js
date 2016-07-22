@@ -39,6 +39,8 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
     return q(new ctor(sink, options));
   };
   AllexEnvironment.prototype.createCommand = function (options) {
+    throw new lib.Error('NOT_IMPLEMENTED_YET', 'Base AllexEnvironment still has to come up with methods to implement sink calls');
+    console.log('command options', options);
   };
 
   return AllexEnvironment;
@@ -53,6 +55,33 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
   var lib = execlib.lib,
     q = lib.q,
     qlib = lib.qlib;
+
+  function AllexRemoteCommand (representation, sinkname, methodname) {
+    this.representation = null;
+    this.methodname = methodname;
+    this.setRepresentation(representation, sinkname);
+  }
+  AllexRemoteCommand.prototype.destroy = function () {
+    this.methodname = null;
+    this.methodname = null;
+  };
+  AllexRemoteCommand.prototype.setRepresentation = function (representation, sinkname) {
+    if (sinkname === '.') {
+      this.representation = representation;
+      return;
+    }
+    this.representation = representation.subsinks[sinkname];
+  };
+  AllexRemoteCommand.prototype.execute = function (args) {
+    args.unshift(this.methodname);
+    return this.representation.waitForSink().then(
+      this.onSink.bind(this, args)
+    );
+  };
+  AllexRemoteCommand.prototype.onSink = function (args, sink) {
+    console.log('calling', arguments);
+    return sink.call.apply(sink, args);
+  };
 
   function AllexRemoteEnvironment (options) {
     AllexEnvironment.call(this, options);
@@ -119,6 +148,18 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     }
     return q(this.userRepresentation.subsinks[sinkname]);
   };
+  AllexRemoteEnvironment.prototype.createCommand = function (options) {
+    if (!options) {
+      throw Error ('no options');
+    }
+    if (!options.sink) {
+      throw Error ('no sink in options');
+    }
+    if (!options.name) {
+      throw new lib.JSONizingError ('NO_NAME_IN_OPTIONS', options, 'No name:');
+    }
+    return new AllexRemoteCommand(this.userRepresentation, options.sink, options.name);
+  };
   AllexRemoteEnvironment.prototype.sendRequest = function (credentials, d) {
     d = d || q.defer();
     lib.request('http://'+this.address+':'+this.port+'/letMeIn', {
@@ -168,6 +209,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
   AllexRemoteEnvironment.prototype._onSink = function (defer, sessionid, sink) {
     if (!sink) {
       this.set('state', 'loggedout');
+      this.checkForSessionId();
       return;
     }
     execlib.execSuite.taskRegistry.run('acquireUserServiceSink', {
@@ -275,11 +317,9 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     if (lib.isArray(ds)) {
       promises = promises.concat(ds.map(this.toDataSource.bind(this)));
     }
-    /*
     if (lib.isArray(cs)) {
       promises = promises.concat(cs.map(this.toCommand.bind(this)));
     }
-    */
     return q.all(promises);
   };
 
@@ -308,7 +348,8 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     if (!desc.name) {
       throw new lib.JSONizingError('NO_COMMAND_NAME', desc, 'No name:');
     }
-    this.dataSources.add(desc.name, this.createCommand(desc.options));
+    this.commands.add(desc.name, this.createCommand(desc.options));
+    return q(true);
   };
   function unregisterer(dss, ds, dsname) {
     dss.unregisterDestroyable(dsname);
@@ -369,6 +410,7 @@ function createAllexDataQueryDataSource(execlib, DataSourceBase) {
     target = null;
   };
   AllexDataQuery.prototype.fire = function () {
+    console.log('allex data changed', this.data);
     this.target.set('data', this.data.slice()); //horror, if there were a more elegant way...
   };
 

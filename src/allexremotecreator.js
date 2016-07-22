@@ -5,6 +5,33 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     q = lib.q,
     qlib = lib.qlib;
 
+  function AllexRemoteCommand (representation, sinkname, methodname) {
+    this.representation = null;
+    this.methodname = methodname;
+    this.setRepresentation(representation, sinkname);
+  }
+  AllexRemoteCommand.prototype.destroy = function () {
+    this.methodname = null;
+    this.methodname = null;
+  };
+  AllexRemoteCommand.prototype.setRepresentation = function (representation, sinkname) {
+    if (sinkname === '.') {
+      this.representation = representation;
+      return;
+    }
+    this.representation = representation.subsinks[sinkname];
+  };
+  AllexRemoteCommand.prototype.execute = function (args) {
+    args.unshift(this.methodname);
+    return this.representation.waitForSink().then(
+      this.onSink.bind(this, args)
+    );
+  };
+  AllexRemoteCommand.prototype.onSink = function (args, sink) {
+    console.log('calling', arguments);
+    return sink.call.apply(sink, args);
+  };
+
   function AllexRemoteEnvironment (options) {
     AllexEnvironment.call(this, options);
     if (!options.entrypoint) {
@@ -70,6 +97,18 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     }
     return q(this.userRepresentation.subsinks[sinkname]);
   };
+  AllexRemoteEnvironment.prototype.createCommand = function (options) {
+    if (!options) {
+      throw Error ('no options');
+    }
+    if (!options.sink) {
+      throw Error ('no sink in options');
+    }
+    if (!options.name) {
+      throw new lib.JSONizingError ('NO_NAME_IN_OPTIONS', options, 'No name:');
+    }
+    return new AllexRemoteCommand(this.userRepresentation, options.sink, options.name);
+  };
   AllexRemoteEnvironment.prototype.sendRequest = function (credentials, d) {
     d = d || q.defer();
     lib.request('http://'+this.address+':'+this.port+'/letMeIn', {
@@ -119,6 +158,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
   AllexRemoteEnvironment.prototype._onSink = function (defer, sessionid, sink) {
     if (!sink) {
       this.set('state', 'loggedout');
+      this.checkForSessionId();
       return;
     }
     execlib.execSuite.taskRegistry.run('acquireUserServiceSink', {

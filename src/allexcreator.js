@@ -34,6 +34,8 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
     return q(new ctor(sink, options));
   };
   AllexEnvironment.prototype.createCommand = function (options) {
+    throw new lib.Error('NOT_IMPLEMENTED_YET', 'Base AllexEnvironment still has to come up with methods to implement sink calls');
+    console.log('command options', options);
   };
 
   return AllexEnvironment;

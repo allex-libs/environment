@@ -40,6 +40,7 @@ function createAllexDataQueryDataSource(execlib, DataSourceBase) {
     target = null;
   };
   AllexDataQuery.prototype.fire = function () {
+    console.log('allex data changed', this.data);
     this.target.set('data', this.data.slice()); //horror, if there were a more elegant way...
   };
 

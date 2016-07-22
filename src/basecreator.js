@@ -59,11 +59,9 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     if (lib.isArray(ds)) {
       promises = promises.concat(ds.map(this.toDataSource.bind(this)));
     }
-    /*
     if (lib.isArray(cs)) {
       promises = promises.concat(cs.map(this.toCommand.bind(this)));
     }
-    */
     return q.all(promises);
   };
 
@@ -92,7 +90,8 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     if (!desc.name) {
       throw new lib.JSONizingError('NO_COMMAND_NAME', desc, 'No name:');
     }
-    this.dataSources.add(desc.name, this.createCommand(desc.options));
+    this.commands.add(desc.name, this.createCommand(desc.options));
+    return q(true);
   };
   function unregisterer(dss, ds, dsname) {
     dss.unregisterDestroyable(dsname);
