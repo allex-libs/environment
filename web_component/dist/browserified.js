@@ -73,6 +73,10 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     this.representation = representation.subsinks[sinkname];
   };
   AllexRemoteCommand.prototype.execute = function (args) {
+    if (!lib.isArray(args)) {
+      console.warn('Supressing sink call');
+      return;
+    }
     args.unshift(this.methodname);
     return this.representation.waitForSink().then(
       this.onSink.bind(this, args)
@@ -116,6 +120,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     if (!this.storage) {
       return;
     }
+    this.set('state', 'pending');
     this.storage.get('sessionid').then(
       this.onSessionId.bind(this),
       this.set.bind(this, 'state', 'loggedout')
@@ -187,19 +192,21 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
       response = response.response;
     }
 
-    if (response) {
-      try {
-        var response = JSON.parse(response);
-        execlib.execSuite.taskRegistry.run('acquireSink', {
-          connectionString: 'ws://'+response.ipaddress+':'+response.port,
-          session: response.session,
-          onSink:this._onSink.bind(this, defer, response.session)
-        });
-      } catch(e) {
-        console.error('problem with', response);
-        console.error(e.stack);
-        console.error(e);
-        //error handling
+    if (lib.isString(response)) {
+      if (response) {
+        try {
+          var response = JSON.parse(response);
+          execlib.execSuite.taskRegistry.run('acquireSink', {
+            connectionString: 'ws://'+response.ipaddress+':'+response.port,
+            session: response.session,
+            onSink:this._onSink.bind(this, defer, response.session)
+          });
+        } catch(e) {
+          console.error('problem with', response);
+          console.error(e.stack);
+          console.error(e);
+          //error handling
+        }
       }
     } else {
       this.giveUp(credentials, defer);
@@ -208,7 +215,6 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
   };
   AllexRemoteEnvironment.prototype._onSink = function (defer, sessionid, sink) {
     if (!sink) {
-      this.set('state', 'loggedout');
       this.checkForSessionId();
       return;
     }
