@@ -348,7 +348,10 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     if (!desc.name) {
       throw new lib.JSONizingError('NO_COMMAND_NAME', desc, 'No name:');
     }
-    this.commands.add(desc.name, this.createCommand(desc.options));
+    var oldc = this.commands.replace(desc.name, this.createCommand(desc.options));
+    if (oldc) {
+      oldc.destroy();
+    }
     return q(true);
   };
   function unregisterer(dss, ds, dsname) {

@@ -22,6 +22,10 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     this.representation = representation.subsinks[sinkname];
   };
   AllexRemoteCommand.prototype.execute = function (args) {
+    if (!lib.isArray(args)) {
+      console.warn('Supressing sink call');
+      return;
+    }
     args.unshift(this.methodname);
     return this.representation.waitForSink().then(
       this.onSink.bind(this, args)
