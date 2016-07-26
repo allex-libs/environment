@@ -94,7 +94,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     return execlib.loadDependencies('client', [
       '.',
       'allex:users'
-    ], qlib.executor(this.sendRequest.bind(this, credentials)));
+    ], qlib.executor(this.sendLetMeInRequest.bind(this, credentials)));
   };
   AllexRemoteEnvironment.prototype.findSink = function (sinkname) {
     if (sinkname === '.') {
@@ -114,7 +114,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     }
     return new AllexRemoteCommand(this.userRepresentation, options.sink, options.name);
   };
-  AllexRemoteEnvironment.prototype.sendRequest = function (credentials, d) {
+  AllexRemoteEnvironment.prototype.sendLetMeInRequest = function (credentials, d) {
     d = d || q.defer();
     lib.request('http://'+this.address+':'+this.port+'/letMeIn', {
       /*
@@ -124,13 +124,13 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
       },
       */
       parameters: credentials,
-      onComplete: this.onResponse.bind(this, credentials, d),
-      onError: this.onRequestFail.bind(this, credentials, d)
+      onComplete: this.onLetMeInResponse.bind(this, credentials, d),
+      onError: this.onLetMeInRequestFail.bind(this, credentials, d)
     });
     credentials = null;
     return d.promise;
-  }
-  AllexRemoteEnvironment.prototype.onResponse = function (credentials, defer, response) {
+  };
+  AllexRemoteEnvironment.prototype.onLetMeInResponse = function (credentials, defer, response) {
     if (!response) {
       this.giveUp(credentials, defer);
       return;
@@ -141,21 +141,19 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
       response = response.response;
     }
 
-    if (lib.isString(response)) {
-      if (response) {
-        try {
-          var response = JSON.parse(response);
-          execlib.execSuite.taskRegistry.run('acquireSink', {
-            connectionString: 'ws://'+response.ipaddress+':'+response.port,
-            session: response.session,
-            onSink:this._onSink.bind(this, defer, response.session)
-          });
-        } catch(e) {
-          console.error('problem with', response);
-          console.error(e.stack);
-          console.error(e);
-          //error handling
-        }
+    if (response) {
+      try {
+        var response = JSON.parse(response);
+        execlib.execSuite.taskRegistry.run('acquireSink', {
+          connectionString: 'ws://'+response.ipaddress+':'+response.port,
+          session: response.session,
+          onSink:this._onSink.bind(this, defer, response.session)
+        });
+      } catch(e) {
+        console.error('problem with', response);
+        console.error(e.stack);
+        console.error(e);
+        //error handling
       }
     } else {
       this.giveUp(credentials, defer);
@@ -189,9 +187,9 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     this.credentialsForLogin = null;
     return q(this.set('state', 'established'));
   };
-  AllexRemoteEnvironment.prototype.onRequestFail = function (credentials, d, reason) {
+  AllexRemoteEnvironment.prototype.onLetMeInRequestFail = function (credentials, d, reason) {
     this.set('error', reason);
-    lib.runNext(this.sendRequest.bind(this, credentials, d), lib.intervals.Second);
+    lib.runNext(this.sendLetMeInRequest.bind(this, credentials, d), lib.intervals.Second);
   };
   AllexRemoteEnvironment.prototype.giveUp = function (credentials, defer) {
     this.credentialsForLogin = null;
@@ -199,6 +197,34 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     this.storage.del('sessionid').then (
       defer.reject.bind(defer, new lib.JSONizingError('INVALID_LOGIN', credentials, 'Invalid'))
     );
+  };
+  AllexRemoteEnvironment.prototype.logout = function () {
+    console.log('will logout');
+    this.storage.get('sessionid').then(
+      this.doDaLogout.bind(this),
+      this.set.bind(this, 'state', 'loggedout')
+    );
+  };
+  AllexRemoteEnvironment.prototype.doDaLogout = function (sessionid) {
+    return this.sendLetMeOutRequest({session: sessionid.sessionid});
+  };
+  AllexRemoteEnvironment.prototype.sendLetMeOutRequest = function (credentials, d) {
+    d = d || q.defer();
+    lib.request('http://'+this.address+':'+this.port+'/letMeOut', {
+      parameters: credentials,
+      onComplete: this.onLetMeOutResponse.bind(this, credentials, d),
+      onError: this.onLetMeOutRequestFail.bind(this, credentials, d)
+    });
+    credentials = null;
+    return d.promise;
+  };
+  AllexRemoteEnvironment.prototype.onLetMeOutResponse = function (credentials, defer, response) {
+    console.log('onLetMeInResponse', response);
+    defer.resolve(true);
+  };
+  AllexRemoteEnvironment.prototype.onLetMeOutRequestFail = function (credentials, defer, reason) {
+    this.set('error', reason);
+    lib.runNext(this.sendLetMeOutRequest.bind(this, credentials, defer), lib.intervals.Second);
   };
   AllexRemoteEnvironment.prototype.type = 'allexremote';
 
