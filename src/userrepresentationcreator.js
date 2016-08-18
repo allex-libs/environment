@@ -403,7 +403,10 @@ function createUserRepresentation(execlib) {
     if (this.sink) {
       return q(this.sink);
     }
-    return this.sinkWaiters.defer();
+    if (this.sinkWaiters) {
+      return this.sinkWaiters.defer();
+    }
+    return q(true);
   };
   function subSinkRepresentationPurger (subsink) {
     subsink.purge();
@@ -470,17 +473,22 @@ function createUserRepresentation(execlib) {
   }
 
   SinkRepresentation.prototype.setSink = function (sink, sinkinfoextras) {
-    var d = q.defer(),
-      subsinkinfoextras = [];
+    var d,
+      subsinkinfoextras;
+    if (!this.stateEvents) {
+      return q(0);
+    }
     if (this.sink) {
       this.purge();
     }
+    d = q.defer();
     if (!sink) {
       //console.log('no sink in setSink');
       this.sink = 0; //intentionally
       d.resolve(0);
     } else {
       this.sink = sink;
+      subsinkinfoextras = [];
       //console.log('at the beginning', sink.localSinkNames, '+', sinkinfoextras);
       if (sinkinfoextras) {
         sinkinfoextras.forEach(sinkInfoAppender.bind(null, sink, subsinkinfoextras));

@@ -21,6 +21,7 @@ function createAllexDataQueryDataSource(execlib, DataSourceBase) {
     DataSourceBase.prototype.destroy.call(this);
   };
   AllexDataQuery.prototype.setTarget = function (target) {
+    if (!this.sink) return;
     this.sink.waitForSink().then(
       this.doSetTarget.bind(this, target)
     );

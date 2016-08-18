@@ -31,7 +31,6 @@ function createAllexHash2ArrayDataSource (execlib, AllexState) {
     }
     var ret = [];
     lib.traverseShallow(data, packer.bind(null, this.columnnames, ret));
-    console.log('AllexHash2Array setting data', ret);
     this.target.set('data', ret);
   };
 

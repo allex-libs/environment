@@ -10,12 +10,27 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
   lib.inherit (AllexEnvironment, EnvironmentBase);
   AllexEnvironment.prototype.createDataSource = function (type, options) {
     if (!options.sink) {
-      throw new lib.JSONizingError('NO_SINK_DESCRIPTION', options, 'No sink description:');
+      return this.createSinkLessSource (type, options);
     }
     return this.findSink(options.sink).then(
       this.onSinkForCreateDataSource.bind(this, type, options)
     );
   };
+
+  AllexEnvironment.prototype.createSinkLessSource = function (type, options) {
+    var ctor;
+    switch (type) {
+      case 'jsarray': {
+        ctor = dataSourceRegistry.JSArray;
+        break;
+      }
+      default:
+        throw new lib.Error('DATASOURCE_TYPE_NOT_APPLICABLE_TO_ALLEX_ENVIRONMENT', type);
+    }
+
+    return q (new ctor(options));
+  };
+
   AllexEnvironment.prototype.onSinkForCreateDataSource = function (type, options, sink) {
     var ctor;
     switch (type) {

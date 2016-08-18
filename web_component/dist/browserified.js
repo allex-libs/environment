@@ -2,7 +2,7 @@
 ALLEX.execSuite.libRegistry.register('allex_environmentlib',require('./src/index')(ALLEX));
 ALLEX.WEB_COMPONENTS.allex_environmentlib = ALLEX.execSuite.libRegistry.get('allex_environmentlib');
 
-},{"./src/index":10}],2:[function(require,module,exports){
+},{"./src/index":11}],2:[function(require,module,exports){
 function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
   'use strict';
 
@@ -15,12 +15,27 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
   lib.inherit (AllexEnvironment, EnvironmentBase);
   AllexEnvironment.prototype.createDataSource = function (type, options) {
     if (!options.sink) {
-      throw new lib.JSONizingError('NO_SINK_DESCRIPTION', options, 'No sink description:');
+      return this.createSinkLessSource (type, options);
     }
     return this.findSink(options.sink).then(
       this.onSinkForCreateDataSource.bind(this, type, options)
     );
   };
+
+  AllexEnvironment.prototype.createSinkLessSource = function (type, options) {
+    var ctor;
+    switch (type) {
+      case 'jsarray': {
+        ctor = dataSourceRegistry.JSArray;
+        break;
+      }
+      default:
+        throw new lib.Error('DATASOURCE_TYPE_NOT_APPLICABLE_TO_ALLEX_ENVIRONMENT', type);
+    }
+
+    return q (new ctor(options));
+  };
+
   AllexEnvironment.prototype.onSinkForCreateDataSource = function (type, options, sink) {
     var ctor;
     switch (type) {
@@ -49,12 +64,36 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
 module.exports = createAllexEnvironment;
 
 },{}],3:[function(require,module,exports){
+function protocolSecurer (protocol) {
+    if ('undefined' !== typeof window && window.location && window.location.protocol && window.location.protocol.indexOf('https') >=0) {
+      return protocol+'s';
+    }
+    return protocol;
+}
+
 function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, AllexEnvironment, UserRepresentation) {
   'use strict';
 
   var lib = execlib.lib,
     q = lib.q,
     qlib = lib.qlib;
+
+  function InMemStorage () {
+    this.map = new lib.Map();
+  }
+  InMemStorage.prototype.destroy = function () {
+    if (this.map) {
+      this.map.destroy();
+    }
+    this.map = null;
+  };
+  InMemStorage.prototype.put = function (name, val) {
+    this.map.replace(name, val);
+    return q(val);
+  }
+  InMemStorage.prototype.get = function (name) {
+    return q(this.map.get(name));
+  };
 
   function AllexRemoteCommand (representation, sinkname, methodname) {
     this.representation = null;
@@ -97,11 +136,13 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     this.identity = options.entrypoint.identity;
     this.userRepresentation = null;
     this.storage = null;
+    this.pendingRequest = false;
     var d = q.defer();
-    d.promise.then(this.checkForSessionId.bind(this));
+    d.promise.then(this.checkForSessionId.bind(this), this.onNoStorage.bind(this));
     this.set('state', 'pending');
     this.storage = new leveldblib.LevelDBHandler({
       starteddefer:d,
+      maxretries:3,
       dbname: 'remoteenvironmentstorage',
       dbcreationoptions: {
         valueEncoding: 'json'
@@ -111,10 +152,24 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
   }
   lib.inherit(AllexRemoteEnvironment, AllexEnvironment);
   AllexRemoteEnvironment.prototype.destroy = function () {
+    this.pendingRequest = null;
+    if (this.storage) {
+      this.storage.destroy();
+    }
     if (this.userRepresentation) {
       this.userRepresentation.destroy();
     }
     this.userRepresentation = null;
+    this.identity = null;
+    this.port = null;
+    this.address = null;
+  };
+  AllexRemoteEnvironment.prototype.onNoStorage = function () {
+    if (this.storage) {
+      this.storage.destroy();
+    }
+    this.storage = new InMemStorage();
+    this.checkForSessionId();
   };
   AllexRemoteEnvironment.prototype.checkForSessionId = function () {
     if (!this.storage) {
@@ -127,6 +182,9 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     );
   };
   AllexRemoteEnvironment.prototype.onSessionId = function (sessionid) {
+    if (!sessionid) {
+      return;
+    }
     this.login({session: sessionid.sessionid});
   };
   AllexRemoteEnvironment.prototype.login = function (credentials) {
@@ -166,8 +224,15 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     return new AllexRemoteCommand(this.userRepresentation, options.sink, options.name);
   };
   AllexRemoteEnvironment.prototype.sendLetMeInRequest = function (credentials, d) {
+    if (this.pendingRequest === null) {
+      return;
+    }
+    if (this.pendingRequest) {
+      return;
+    }
+    this.pendingRequest = true;
     d = d || q.defer();
-    lib.request('http://'+this.address+':'+this.port+'/letMeIn', {
+    lib.request(protocolSecurer('http')+'://'+this.address+':'+this.port+'/letMeIn', {
       /*
       parameters: {
         username: credentials.username,
@@ -182,6 +247,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     return d.promise;
   };
   AllexRemoteEnvironment.prototype.onLetMeInResponse = function (credentials, defer, response) {
+    this.pendingRequest = false;
     if (!response) {
       this.giveUp(credentials, defer);
       return;
@@ -194,22 +260,33 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
 
     if (response) {
       try {
-        var response = JSON.parse(response);
+        var response = JSON.parse(response),
+          protocol = protocolSecurer('ws');
+        if (!(response.ipaddress && response.port && response.session)) {
+          this.giveUp(credentials, defer);
+          return;
+        }
         execlib.execSuite.taskRegistry.run('acquireSink', {
-          connectionString: 'ws://'+response.ipaddress+':'+response.port,
+          connectionString: protocol+'://'+response.ipaddress+':'+response.port,
           session: response.session,
           onSink:this._onSink.bind(this, defer, response.session)
         });
       } catch(e) {
         console.error('problem with', response);
-        console.error(e.stack);
+        //console.error(e.stack);
         console.error(e);
         //error handling
+        this.giveUp(credentials, defer);
       }
     } else {
-      this.giveUp(credentials, defer);
+      lib.runNext(this.sendLetMeInRequest.bind(this, credentials, defer), lib.intervals.Second);
     }
     defer = null;
+  };
+  AllexRemoteEnvironment.prototype.onLetMeInRequestFail = function (credentials, d, reason) {
+    this.pendingRequest = false;
+    this.set('error', reason);
+    lib.runNext(this.sendLetMeInRequest.bind(this, credentials, d), lib.intervals.Second);
   };
   AllexRemoteEnvironment.prototype._onSink = function (defer, sessionid, sink) {
     if (!sink) {
@@ -238,10 +315,6 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     this.credentialsForLogin = null;
     return q(this.set('state', 'established'));
   };
-  AllexRemoteEnvironment.prototype.onLetMeInRequestFail = function (credentials, d, reason) {
-    this.set('error', reason);
-    lib.runNext(this.sendLetMeInRequest.bind(this, credentials, d), lib.intervals.Second);
-  };
   AllexRemoteEnvironment.prototype.giveUp = function (credentials, defer) {
     this.credentialsForLogin = null;
     this.set('state', 'loggedout');
@@ -261,7 +334,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
   };
   AllexRemoteEnvironment.prototype.sendLetMeOutRequest = function (credentials, d) {
     d = d || q.defer();
-    lib.request('http://'+this.address+':'+this.port+'/letMeOut', {
+    lib.request(protocolSecurer('http')+'://'+this.address+':'+this.port+'/letMeOut', {
       parameters: credentials,
       onComplete: this.onLetMeOutResponse.bind(this, credentials, d),
       onError: this.onLetMeOutRequestFail.bind(this, credentials, d)
@@ -426,6 +499,7 @@ function createAllexDataQueryDataSource(execlib, DataSourceBase) {
     DataSourceBase.prototype.destroy.call(this);
   };
   AllexDataQuery.prototype.setTarget = function (target) {
+    if (!this.sink) return;
     this.sink.waitForSink().then(
       this.doSetTarget.bind(this, target)
     );
@@ -488,7 +562,6 @@ function createAllexHash2ArrayDataSource (execlib, AllexState) {
     }
     var ret = [];
     lib.traverseShallow(data, packer.bind(null, this.columnnames, ret));
-    console.log('AllexHash2Array setting data', ret);
     this.target.set('data', ret);
   };
 
@@ -573,18 +646,46 @@ function createDataSourceRegistry (execlib) {
   var DataSourceBase = require('./basecreator')(execlib),
     AllexState = require('./allexstatecreator')(execlib, DataSourceBase),
     AllexHash2Array = require('./allexhash2arraycreator')(execlib, AllexState),
-    AllexDataQuery = require('./allexdataquerycreator')(execlib, DataSourceBase);
+    AllexDataQuery = require('./allexdataquerycreator')(execlib, DataSourceBase),
+    JSArray = require('./jsarraycreator')(execlib, DataSourceBase);
 
   return {
     AllexState: AllexState,
     AllexHash2Array: AllexHash2Array,
-    AllexDataQuery: AllexDataQuery
+    AllexDataQuery: AllexDataQuery,
+    JSArray : JSArray
   };
 }
 
 module.exports = createDataSourceRegistry;
 
-},{"./allexdataquerycreator":5,"./allexhash2arraycreator":6,"./allexstatecreator":7,"./basecreator":8}],10:[function(require,module,exports){
+},{"./allexdataquerycreator":5,"./allexhash2arraycreator":6,"./allexstatecreator":7,"./basecreator":8,"./jsarraycreator":10}],10:[function(require,module,exports){
+function createJSArrayDataSource(execlib, DataSourceBase) {
+  'use strict';
+
+  var lib = execlib.lib;
+
+  function JSArray (options) {
+    DataSourceBase.call(this, options);
+    this.data = options.data;
+  }
+  lib.inherit (JSArray, DataSourceBase);
+  JSArray.prototype.destroy = function () {
+    this.data = null;
+    DataSourceBase.prototype.destroy.call(this);
+  };
+
+  JSArray.prototype.setTarget = function (target) {
+    DataSourceBase.prototype.setTarget.call(this, target);
+    this.target.set('data', this.data.slice());
+  };
+
+  return JSArray;
+}
+
+module.exports = createJSArrayDataSource;
+
+},{}],11:[function(require,module,exports){
 (function (global){
 function createLib (execlib) {
   return execlib.loadDependencies('client', ['allex:leveldb:lib'], createEnvironmentFactory.bind(null, execlib));
@@ -624,7 +725,7 @@ function createEnvironmentFactory (execlib, leveldblib) {
 module.exports = createLib;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./allexcreator":2,"./allexremotecreator":3,"./basecreator":4,"./datasources":9,"./userrepresentationcreator":11}],11:[function(require,module,exports){
+},{"./allexcreator":2,"./allexremotecreator":3,"./basecreator":4,"./datasources":9,"./userrepresentationcreator":12}],12:[function(require,module,exports){
 function createUserRepresentation(execlib) {
   'use strict';
   var lib = execlib.lib,
@@ -1030,7 +1131,10 @@ function createUserRepresentation(execlib) {
     if (this.sink) {
       return q(this.sink);
     }
-    return this.sinkWaiters.defer();
+    if (this.sinkWaiters) {
+      return this.sinkWaiters.defer();
+    }
+    return q(true);
   };
   function subSinkRepresentationPurger (subsink) {
     subsink.purge();
@@ -1097,17 +1201,22 @@ function createUserRepresentation(execlib) {
   }
 
   SinkRepresentation.prototype.setSink = function (sink, sinkinfoextras) {
-    var d = q.defer(),
-      subsinkinfoextras = [];
+    var d,
+      subsinkinfoextras;
+    if (!this.stateEvents) {
+      return q(0);
+    }
     if (this.sink) {
       this.purge();
     }
+    d = q.defer();
     if (!sink) {
       //console.log('no sink in setSink');
       this.sink = 0; //intentionally
       d.resolve(0);
     } else {
       this.sink = sink;
+      subsinkinfoextras = [];
       //console.log('at the beginning', sink.localSinkNames, '+', sinkinfoextras);
       if (sinkinfoextras) {
         sinkinfoextras.forEach(sinkInfoAppender.bind(null, sink, subsinkinfoextras));

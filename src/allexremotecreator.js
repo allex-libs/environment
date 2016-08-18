@@ -1,9 +1,33 @@
+function protocolSecurer (protocol) {
+    if ('undefined' !== typeof window && window.location && window.location.protocol && window.location.protocol.indexOf('https') >=0) {
+      return protocol+'s';
+    }
+    return protocol;
+}
+
 function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, AllexEnvironment, UserRepresentation) {
   'use strict';
 
   var lib = execlib.lib,
     q = lib.q,
     qlib = lib.qlib;
+
+  function InMemStorage () {
+    this.map = new lib.Map();
+  }
+  InMemStorage.prototype.destroy = function () {
+    if (this.map) {
+      this.map.destroy();
+    }
+    this.map = null;
+  };
+  InMemStorage.prototype.put = function (name, val) {
+    this.map.replace(name, val);
+    return q(val);
+  }
+  InMemStorage.prototype.get = function (name) {
+    return q(this.map.get(name));
+  };
 
   function AllexRemoteCommand (representation, sinkname, methodname) {
     this.representation = null;
@@ -46,11 +70,13 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     this.identity = options.entrypoint.identity;
     this.userRepresentation = null;
     this.storage = null;
+    this.pendingRequest = false;
     var d = q.defer();
-    d.promise.then(this.checkForSessionId.bind(this));
+    d.promise.then(this.checkForSessionId.bind(this), this.onNoStorage.bind(this));
     this.set('state', 'pending');
     this.storage = new leveldblib.LevelDBHandler({
       starteddefer:d,
+      maxretries:3,
       dbname: 'remoteenvironmentstorage',
       dbcreationoptions: {
         valueEncoding: 'json'
@@ -60,10 +86,24 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
   }
   lib.inherit(AllexRemoteEnvironment, AllexEnvironment);
   AllexRemoteEnvironment.prototype.destroy = function () {
+    this.pendingRequest = null;
+    if (this.storage) {
+      this.storage.destroy();
+    }
     if (this.userRepresentation) {
       this.userRepresentation.destroy();
     }
     this.userRepresentation = null;
+    this.identity = null;
+    this.port = null;
+    this.address = null;
+  };
+  AllexRemoteEnvironment.prototype.onNoStorage = function () {
+    if (this.storage) {
+      this.storage.destroy();
+    }
+    this.storage = new InMemStorage();
+    this.checkForSessionId();
   };
   AllexRemoteEnvironment.prototype.checkForSessionId = function () {
     if (!this.storage) {
@@ -76,6 +116,9 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     );
   };
   AllexRemoteEnvironment.prototype.onSessionId = function (sessionid) {
+    if (!sessionid) {
+      return;
+    }
     this.login({session: sessionid.sessionid});
   };
   AllexRemoteEnvironment.prototype.login = function (credentials) {
@@ -115,8 +158,15 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     return new AllexRemoteCommand(this.userRepresentation, options.sink, options.name);
   };
   AllexRemoteEnvironment.prototype.sendLetMeInRequest = function (credentials, d) {
+    if (this.pendingRequest === null) {
+      return;
+    }
+    if (this.pendingRequest) {
+      return;
+    }
+    this.pendingRequest = true;
     d = d || q.defer();
-    lib.request('http://'+this.address+':'+this.port+'/letMeIn', {
+    lib.request(protocolSecurer('http')+'://'+this.address+':'+this.port+'/letMeIn', {
       /*
       parameters: {
         username: credentials.username,
@@ -131,6 +181,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     return d.promise;
   };
   AllexRemoteEnvironment.prototype.onLetMeInResponse = function (credentials, defer, response) {
+    this.pendingRequest = false;
     if (!response) {
       this.giveUp(credentials, defer);
       return;
@@ -143,22 +194,33 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
 
     if (response) {
       try {
-        var response = JSON.parse(response);
+        var response = JSON.parse(response),
+          protocol = protocolSecurer('ws');
+        if (!(response.ipaddress && response.port && response.session)) {
+          this.giveUp(credentials, defer);
+          return;
+        }
         execlib.execSuite.taskRegistry.run('acquireSink', {
-          connectionString: 'ws://'+response.ipaddress+':'+response.port,
+          connectionString: protocol+'://'+response.ipaddress+':'+response.port,
           session: response.session,
           onSink:this._onSink.bind(this, defer, response.session)
         });
       } catch(e) {
         console.error('problem with', response);
-        console.error(e.stack);
+        //console.error(e.stack);
         console.error(e);
         //error handling
+        this.giveUp(credentials, defer);
       }
     } else {
-      this.giveUp(credentials, defer);
+      lib.runNext(this.sendLetMeInRequest.bind(this, credentials, defer), lib.intervals.Second);
     }
     defer = null;
+  };
+  AllexRemoteEnvironment.prototype.onLetMeInRequestFail = function (credentials, d, reason) {
+    this.pendingRequest = false;
+    this.set('error', reason);
+    lib.runNext(this.sendLetMeInRequest.bind(this, credentials, d), lib.intervals.Second);
   };
   AllexRemoteEnvironment.prototype._onSink = function (defer, sessionid, sink) {
     if (!sink) {
@@ -187,10 +249,6 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     this.credentialsForLogin = null;
     return q(this.set('state', 'established'));
   };
-  AllexRemoteEnvironment.prototype.onLetMeInRequestFail = function (credentials, d, reason) {
-    this.set('error', reason);
-    lib.runNext(this.sendLetMeInRequest.bind(this, credentials, d), lib.intervals.Second);
-  };
   AllexRemoteEnvironment.prototype.giveUp = function (credentials, defer) {
     this.credentialsForLogin = null;
     this.set('state', 'loggedout');
@@ -210,7 +268,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
   };
   AllexRemoteEnvironment.prototype.sendLetMeOutRequest = function (credentials, d) {
     d = d || q.defer();
-    lib.request('http://'+this.address+':'+this.port+'/letMeOut', {
+    lib.request(protocolSecurer('http')+'://'+this.address+':'+this.port+'/letMeOut', {
       parameters: credentials,
       onComplete: this.onLetMeOutResponse.bind(this, credentials, d),
       onError: this.onLetMeOutRequestFail.bind(this, credentials, d)
