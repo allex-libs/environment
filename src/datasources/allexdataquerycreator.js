@@ -1,34 +1,25 @@
-function createAllexDataQueryDataSource(execlib, DataSourceBase) {
+function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
   'use strict';
 
   var lib = execlib.lib,
+    q = lib.q,
     taskRegistry = execlib.execSuite.taskRegistry;
 
   function AllexDataQuery (sink, options) {
-    DataSourceBase.call(this, options);
-    this.sink = sink;
-    this.task = null;
+    DataSourceTaskBase.call(this, sink, options);
     this.data = [];
   }
-  lib.inherit(AllexDataQuery, DataSourceBase);
+  lib.inherit(AllexDataQuery, DataSourceTaskBase);
   AllexDataQuery.prototype.destroy = function () {
     this.data = null;
-    if (this.task) {
-      this.task.destroy();
-    }
-    this.task = null;
-    this.sink = null;
-    DataSourceBase.prototype.destroy.call(this);
+    DataSourceTaskBase.prototype.destroy.call(this);
   };
-  AllexDataQuery.prototype.setTarget = function (target) {
-    if (!this.sink) return;
-    this.sink.waitForSink().then(
-      this.doSetTarget.bind(this, target)
-    );
-  };
-  AllexDataQuery.prototype.doSetTarget = function (target, sink) {
-    DataSourceBase.prototype.setTarget.call(this, target);
+
+  AllexDataQuery.prototype._doStartTask = function (sink) {
     var fire_er = this.fire.bind(this);
+    if (this.filter) {
+      console.log('WILL START TASK WITH ...', this.filter);
+    }
     this.task = taskRegistry.run('materializeQuery', {
       sink: sink,
       data: this.data,
@@ -36,10 +27,12 @@ function createAllexDataQueryDataSource(execlib, DataSourceBase) {
       onNewRecord: fire_er,
       onDelete: fire_er,
       onUpdate: fire_er,
-      continuous: true
+      continuous: true,
+      filter : this.filter
     });
-    target = null;
+    return q.resolve(true);
   };
+
   AllexDataQuery.prototype.fire = function () {
     console.log('allex data changed', this.data);
     this.target.set('data', this.data.slice()); //horror, if there were a more elegant way...
