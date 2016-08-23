@@ -1,7 +1,8 @@
 function createDataSourceTaskBase (execlib, DataSourceBase) {
   'use strict';
 
-  var lib = execlib.lib;
+  var lib = execlib.lib,
+    q = lib.q;
 
   function DataSourceTaskBase (tasksink, options){
     DataSourceBase.call(this, options);
@@ -50,13 +51,14 @@ function createDataSourceTaskBase (execlib, DataSourceBase) {
   };
 
   DataSourceTaskBase.prototype._taskStarted = function () {
-    console.log('go go go ... task started ...');
+    //console.log('go go go ... task started ...');
     this._task_starting = null;
   };
 
   DataSourceTaskBase.prototype.onGotSink = function (tasksink){
     //if datasource was stopped while tasksink was obtained, make sure that task is not started 
     if (this._should_stop) return q.resolve(true);
+    if (!tasksink.destroyed) return q.reject(false);
     return this._doStartTask(tasksink);
   };
 
