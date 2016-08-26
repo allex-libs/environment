@@ -90,6 +90,9 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
       case 'allexdata+bank':
         ctor = dataSourceRegistry.AllexDataPlusBank;
         break;
+      case 'allexdata+leveldb':
+        ctor = dataSourceRegistry.AllexDataPlusLevelDB;
+        break;
       default:
         throw new lib.Error('DATASOURCE_TYPE_NOT_APPLICABLE_TO_ALLEX_ENVIRONMENT', type);
     }
