@@ -6,14 +6,14 @@ function createDataSourceRegistry (execlib) {
     AllexHash2Array = require('./allexhash2arraycreator')(execlib, AllexState),
     AllexDataQuery = require('./allexdataquerycreator')(execlib, DataSourceTaskBase),
     AllexDataPlusBank = require('./allexdataplusbankcreator')(execlib, DataSourceTaskBase),
-    JSArray = require('./jsarraycreator')(execlib, DataSourceBase);
+    JSData = require('./jsdatacreator')(execlib, DataSourceBase);
 
   return {
     AllexState: AllexState,
     AllexHash2Array: AllexHash2Array,
     AllexDataQuery: AllexDataQuery,
     AllexDataPlusBank: AllexDataPlusBank,
-    JSArray : JSArray
+    JSData: JSData
   };
 }
 

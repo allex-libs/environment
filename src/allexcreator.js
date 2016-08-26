@@ -23,8 +23,8 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
   AllexEnvironment.prototype.createSinkLessSource = function (type, options) {
     var ctor;
     switch (type) {
-      case 'jsarray': {
-        ctor = dataSourceRegistry.JSArray;
+      case 'jsdata': {
+        ctor = dataSourceRegistry.JSData;
         break;
       }
       default:

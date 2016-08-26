@@ -28,8 +28,8 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
   AllexEnvironment.prototype.createSinkLessSource = function (type, options) {
     var ctor;
     switch (type) {
-      case 'jsarray': {
-        ctor = dataSourceRegistry.JSArray;
+      case 'jsdata': {
+        ctor = dataSourceRegistry.JSData;
         break;
       }
       default:
@@ -779,44 +779,54 @@ function createDataSourceRegistry (execlib) {
     AllexHash2Array = require('./allexhash2arraycreator')(execlib, AllexState),
     AllexDataQuery = require('./allexdataquerycreator')(execlib, DataSourceTaskBase),
     AllexDataPlusBank = require('./allexdataplusbankcreator')(execlib, DataSourceTaskBase),
-    JSArray = require('./jsarraycreator')(execlib, DataSourceBase);
+    JSData = require('./jsdatacreator')(execlib, DataSourceBase);
 
   return {
     AllexState: AllexState,
     AllexHash2Array: AllexHash2Array,
     AllexDataQuery: AllexDataQuery,
     AllexDataPlusBank: AllexDataPlusBank,
-    JSArray : JSArray
+    JSData: JSData
   };
 }
 
 module.exports = createDataSourceRegistry;
 
-},{"./allexdataplusbankcreator":5,"./allexdataquerycreator":6,"./allexhash2arraycreator":7,"./allexstatecreator":8,"./basecreator":9,"./jsarraycreator":11,"./taskbasecreator":12}],11:[function(require,module,exports){
-function createJSArrayDataSource(execlib, DataSourceBase) {
+},{"./allexdataplusbankcreator":5,"./allexdataquerycreator":6,"./allexhash2arraycreator":7,"./allexstatecreator":8,"./basecreator":9,"./jsdatacreator":11,"./taskbasecreator":12}],11:[function(require,module,exports){
+function createJSDataDataSource(execlib, DataSourceBase) {
   'use strict';
 
   var lib = execlib.lib;
 
-  function JSArray (options) {
+  function JSData (options) {
     DataSourceBase.call(this, options);
     this.data = options.data;
   }
-  lib.inherit (JSArray, DataSourceBase);
-  JSArray.prototype.destroy = function () {
+  lib.inherit (JSData, DataSourceBase);
+  JSData.prototype.destroy = function () {
     this.data = null;
     DataSourceBase.prototype.destroy.call(this);
   };
 
-  JSArray.prototype.setTarget = function (target) {
+  JSData.prototype.setTarget = function (target) {
     DataSourceBase.prototype.setTarget.call(this, target);
-    this.target.set('data', this.data.slice());
+    console.log('about to set data ...', this.data);
+    if (lib.isArray(this.data)) {
+      this.target.set('data', this.data.slice());
+      return;
+    }
+
+    if (this.data instanceof Object){
+      this.target.set('data', lib.extend({}, this.data));
+      return;
+    }
+    this.target.set('data', this.data);
   };
 
-  return JSArray;
+  return JSData;
 }
 
-module.exports = createJSArrayDataSource;
+module.exports = createJSDataDataSource;
 
 },{}],12:[function(require,module,exports){
 function createDataSourceTaskBase (execlib, DataSourceBase) {
