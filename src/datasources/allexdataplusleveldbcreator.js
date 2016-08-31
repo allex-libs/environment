@@ -45,7 +45,8 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
       onNewRecord: fire_er,
       onDelete: fire_er,
       onUpdate: fire_er,
-      continuous: true
+      continuous: true,
+      filter : this.filter
     });
     return this.leveldbsink.waitForSink().then(
       this.onLeveldbSink.bind(this)

@@ -606,7 +606,8 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
       onNewRecord: fire_er,
       onDelete: fire_er,
       onUpdate: fire_er,
-      continuous: true
+      continuous: true,
+      filter : this.filter
     });
     return this.leveldbsink.waitForSink().then(
       this.onLeveldbSink.bind(this)
@@ -663,9 +664,6 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
 
   AllexDataQuery.prototype._doStartTask = function (sink) {
     var fire_er = this.fire.bind(this);
-    if (this.filter) {
-      console.log('WILL START TASK WITH ...', this.filter);
-    }
     this.task = taskRegistry.run('materializeQuery', {
       sink: sink,
       data: this.data,
@@ -929,6 +927,9 @@ function createDataSourceTaskBase (execlib, DataSourceBase) {
     //if datasource was stopped while tasksink was obtained, make sure that task is not started 
     if (this._should_stop) return q.resolve(true);
     if (!tasksink.destroyed) return q.reject(false);
+    if (this.filter) {
+      console.log('about to start data task with filter', this.filter);
+    }
     return this._doStartTask(tasksink);
   };
 

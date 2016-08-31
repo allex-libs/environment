@@ -59,6 +59,9 @@ function createDataSourceTaskBase (execlib, DataSourceBase) {
     //if datasource was stopped while tasksink was obtained, make sure that task is not started 
     if (this._should_stop) return q.resolve(true);
     if (!tasksink.destroyed) return q.reject(false);
+    if (this.filter) {
+      console.log('about to start data task with filter', this.filter);
+    }
     return this._doStartTask(tasksink);
   };
 

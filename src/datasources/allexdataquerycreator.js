@@ -17,9 +17,6 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
 
   AllexDataQuery.prototype._doStartTask = function (sink) {
     var fire_er = this.fire.bind(this);
-    if (this.filter) {
-      console.log('WILL START TASK WITH ...', this.filter);
-    }
     this.task = taskRegistry.run('materializeQuery', {
       sink: sink,
       data: this.data,
