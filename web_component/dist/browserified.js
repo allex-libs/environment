@@ -165,7 +165,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
   AllexRemoteCommand.prototype.execute = function (args) {
     if (!lib.isArray(args)) {
       console.warn('Supressing sink call');
-      return;
+      return q.reject(new lib.Error('ARGUMENTS_FOR_COMMAND_EXECUTION_MUST_BE_AN_ARRAY'));
     }
     args.unshift(this.methodname);
     return this.representation.waitForSink().then(
