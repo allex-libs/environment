@@ -32,7 +32,7 @@ function createAllexStateDataSource (execlib, DataSourceBase) {
     this.monitor = this.sink.monitorStateForGui(h);
   };
   AllexState.prototype.onStateData = function (data) {
-    console.log('got state data', data);
+    //console.log('got state data', data);
     if (!this.target) {
       return;
     }
