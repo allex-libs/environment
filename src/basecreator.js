@@ -54,6 +54,7 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
   EnvironmentBase.prototype.onEstablished = function () {
     var ds = this.getConfigVal('datasources'),
       cs = this.getConfigVal('commands'),
+      dcs = this.getConfigVal('datacommands'),
       promises = [];
     this.set('error', null);
     if (lib.isArray(ds)) {
@@ -61,6 +62,9 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     }
     if (lib.isArray(cs)) {
       promises = promises.concat(cs.map(this.toCommand.bind(this)));
+    }
+    if (lib.isArray(dcs)) {
+      promises = promises.concat(dcs.map(this.toDataCommand.bind(this)));
     }
     return q.all(promises);
   };
@@ -95,6 +99,23 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
       oldc.destroy();
     }
     return q(true);
+  };
+  EnvironmentBase.prototype.toDataCommand = function (desc) {
+    if (!desc.name) {
+      throw new lib.JSONizingError('NO_COMMAND_NAME', desc, 'No name:');
+    }
+    return this.toDataSource({
+      name: desc.name,
+      type: 'commandwaiter',
+      options: {}
+    }).then(
+      this.onDataSourceForDataCommand.bind(this, desc)
+    );
+  };
+  EnvironmentBase.prototype.onDataSourceForDataCommand = function (desc, waiter) {
+    desc.options = desc.options || {};
+    desc.options.waiter = waiter;
+    return this.toCommand(desc);
   };
   function unregisterer(dss, ds, dsname) {
     dss.unregisterDestroyable(dsname);

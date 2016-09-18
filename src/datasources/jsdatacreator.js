@@ -15,6 +15,13 @@ function createJSDataDataSource(execlib, DataSourceBase) {
 
   JSData.prototype.setTarget = function (target) {
     DataSourceBase.prototype.setTarget.call(this, target);
+    this.setData();
+  };
+
+  JSData.prototype.setData = function () {
+    if (!this.target) {
+      return;
+    }
     if (lib.isArray(this.data)) {
       this.target.set('data', this.data.slice());
       return;

@@ -29,10 +29,10 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     return q(this.map.get(name));
   };
 
-  function AllexRemoteCommand (representation, sinkname, methodname) {
+  function AllexRemoteCommand (representation, options) {
     this.representation = null;
-    this.methodname = methodname;
-    this.setRepresentation(representation, sinkname);
+    this.methodname = options.name;
+    this.setRepresentation(representation, options.sink);
   }
   AllexRemoteCommand.prototype.destroy = function () {
     this.methodname = null;
@@ -58,6 +58,56 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
   AllexRemoteCommand.prototype.onSink = function (args, sink) {
     console.log('calling', arguments);
     return sink.call.apply(sink, args);
+  };
+
+  function AllexRemoteDataCommand (representation, options) {
+    AllexRemoteCommand.call(this, representation, options);
+    this.waiter = options.waiter;
+    this.waiter.setData([]);
+  }
+  lib.inherit(AllexRemoteDataCommand, AllexRemoteCommand);
+
+  function AllexLevelDBStreamerCommand (representation, options) {
+    AllexRemoteDataCommand.call(this, representation, options);
+    this.primarykey = options.primarykey;
+    this.fieldnames = options.fieldnames;
+    this.pagesize = options.pagesize || 10;
+  };
+  lib.inherit(AllexLevelDBStreamerCommand, AllexRemoteDataCommand);
+  function resolver(d) {
+    d.resolve(true);
+  }
+  AllexLevelDBStreamerCommand.prototype.onSink = function (args, sink) {
+    this.waiter.setData([]);
+    return execlib.execSuite.libRegistry.get('allex_leveldblib').streamInSink(
+      sink,
+      this.methodname,
+      {pagesize: this.pagesize},
+      this.onLevelDBData.bind(this),
+      resolver
+    );
+  };
+  AllexLevelDBStreamerCommand.prototype.onLevelDBData = function (kv) {
+    var ret, _ret;
+    if (!kv) {
+      return;
+    }
+    if (!this.waiter) {
+      return;
+    }
+    ret  = {};
+    if (this.primarykey){
+      ret[this.primarykey] = kv.key;
+    }
+    if (lib.isArray(this.fieldnames)) {
+      _ret = ret;
+      this.fieldnames.forEach(function (name, index) {
+        _ret[name] = kv.value[index];
+      });
+      _ret = null;
+    }
+    kv = null;
+    this.waiter.appendRecord(ret);
   };
 
   function AllexRemoteEnvironment (options) {
@@ -146,6 +196,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     return q(this.userRepresentation.subsinks[sinkname]);
   };
   AllexRemoteEnvironment.prototype.createCommand = function (options) {
+    var ctor;
     if (!options) {
       throw Error ('no options');
     }
@@ -155,7 +206,15 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     if (!options.name) {
       throw new lib.JSONizingError ('NO_NAME_IN_OPTIONS', options, 'No name:');
     }
-    return new AllexRemoteCommand(this.userRepresentation, options.sink, options.name);
+    switch (options.type) {
+      case 'leveldbstreamer':
+        ctor = AllexLevelDBStreamerCommand;
+        break;
+      default:
+        ctor = AllexRemoteCommand;
+        break;
+    }
+    return new ctor(this.userRepresentation, options);
   };
   AllexRemoteEnvironment.prototype.sendLetMeInRequest = function (credentials, d) {
     if (this.pendingRequest === null) {

@@ -23,10 +23,12 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
   AllexEnvironment.prototype.createSinkLessSource = function (type, options) {
     var ctor;
     switch (type) {
-      case 'jsdata': {
+      case 'jsdata': 
         ctor = dataSourceRegistry.JSData;
         break;
-      }
+      case 'commandwaiter':
+        ctor = dataSourceRegistry.AllexCommandDataWaiter;
+        break;
       default:
         throw new lib.Error('DATASOURCE_TYPE_NOT_APPLICABLE_TO_ALLEX_ENVIRONMENT', type);
     }
