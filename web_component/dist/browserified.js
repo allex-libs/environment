@@ -185,6 +185,10 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     this.waiter.setData([]);
   }
   lib.inherit(AllexRemoteDataCommand, AllexRemoteCommand);
+  AllexRemoteDataCommand.prototype.destroy = function () {
+    this.waiter = null;
+    AllexRemoteCommand.prototype.destroy.call(this);
+  };
 
   function AllexLevelDBStreamerCommand (representation, options) {
     AllexRemoteDataCommand.call(this, representation, options);
@@ -193,6 +197,12 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     this.pagesize = options.pagesize || 10;
   };
   lib.inherit(AllexLevelDBStreamerCommand, AllexRemoteDataCommand);
+  AllexLevelDBStreamerCommand.prototype.destroy = function () {
+    this.pagesize = null;
+    this.fieldnames = null;
+    this.primarykey = null;
+    AllexRemoteDataCommand.prototype.destroy.call(this);
+  };
   function resolver(d) {
     d.resolve(true);
   }
