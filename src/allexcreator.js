@@ -89,9 +89,11 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
   AllexEnvironment.prototype.onSinksReady = function (type, sinks, options) {
     var ctor;
     switch (type) {
+      /*
       case 'allexdata+bank':
         ctor = dataSourceRegistry.AllexDataPlusBank;
         break;
+        */
       case 'allexdata+leveldb':
         ctor = dataSourceRegistry.AllexDataPlusLevelDB;
         break;

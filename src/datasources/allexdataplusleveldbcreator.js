@@ -5,6 +5,9 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     taskRegistry = execlib.execSuite.taskRegistry,
     q = lib.q;
 
+  function passthru (item) {
+    return item;
+  }
   function AllexDataPlusLevelDB (sinks, options) {
     if (!sinks.hasOwnProperty('data')) {
       throw new lib.Error('NO_DATA_SINK_IN_SINKS');
@@ -19,7 +22,8 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     this.leveldbsink = sinks.leveldb;
     this.pk = options.primarykey;
     this.valuename = options.valuename || 'value';
-    this.valuefilter = options.valuefilter || lib.dummyFunc;
+    this.keyfilter = options.keyfilter || passthru;
+    this.valuefilter = options.valuefilter || passthru;
     this.data = [];
     this.map = new lib.Map();
   }
@@ -34,6 +38,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     this.pk = null;
     this.leveldbsink = null;
     this.valuefilter = null;
+    this.keyfilter = null;
     DataSourceTaskBase.prototype.destroy.call(this);
   };
   AllexDataPlusLevelDB.prototype._doStartTask = function (tasksink) {
@@ -53,7 +58,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     );
   };
   AllexDataPlusLevelDB.prototype.onLeveldbSink = function (leveldbsink) {
-    leveldbsink.consumeChannel('l', this.onBalance.bind(this));
+    leveldbsink.consumeChannel('l', this.onLevelDBData.bind(this));
     //accounts? zaista?
     leveldbsink.sessionCall('hook', {scan: true, accounts: ['***']});
     return q.resolve(true);
@@ -62,9 +67,10 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     this.map.traverse(this.valuer.bind(this));
     this.target.set('data', this.data.slice());
   };
-  AllexDataPlusLevelDB.prototype.onBalance = function (uservaluearry) {
-    this.map.replace(uservaluearry[0], this.valuefilter(uservaluearry[1]));
-    this.valuer(this.valuefilter(uservaluearry[1]), uservaluearry[0]);
+  AllexDataPlusLevelDB.prototype.onLevelDBData = function (uservaluearry) {
+    var k = this.keyfilter(uservaluearry[0]), v = this.valuefilter(uservaluearry[1]);
+    this.map.replace(k, v);
+    this.valuer(v, k);
     this.target.set('data', this.data.slice());
   };
   AllexDataPlusLevelDB.prototype.valuer = function (value, pk) {

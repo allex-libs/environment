@@ -6,7 +6,7 @@ function createDataSourceRegistry (execlib) {
     AllexHash2Array = require('./allexhash2arraycreator')(execlib, AllexState),
     AllexDataQuery = require('./allexdataquerycreator')(execlib, DataSourceTaskBase),
     AllexDataPlusLevelDB = require('./allexdataplusleveldbcreator')(execlib, DataSourceTaskBase),
-    AllexDataPlusBank = require('./allexdataplusbankcreator')(execlib, AllexDataPlusLevelDB),
+    //AllexDataPlusBank = require('./allexdataplusbankcreator')(execlib, AllexDataPlusLevelDB),
     JSData = require('./jsdatacreator')(execlib, DataSourceBase),
     AllexCommandDataWaiter = require('./allexcommanddatawaitercreator')(execlib, JSData);
 
@@ -15,7 +15,7 @@ function createDataSourceRegistry (execlib) {
     AllexHash2Array: AllexHash2Array,
     AllexDataQuery: AllexDataQuery,
     AllexDataPlusLevelDB : AllexDataPlusLevelDB,
-    AllexDataPlusBank: AllexDataPlusBank,
+    //AllexDataPlusBank: AllexDataPlusBank,
     JSData: JSData,
     AllexCommandDataWaiter: AllexCommandDataWaiter
   };

@@ -2,7 +2,7 @@
 ALLEX.execSuite.libRegistry.register('allex_environmentlib',require('./src/index')(ALLEX));
 ALLEX.WEB_COMPONENTS.allex_environmentlib = ALLEX.execSuite.libRegistry.get('allex_environmentlib');
 
-},{"./src/index":15}],2:[function(require,module,exports){
+},{"./src/index":14}],2:[function(require,module,exports){
 function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
   'use strict';
 
@@ -94,9 +94,11 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
   AllexEnvironment.prototype.onSinksReady = function (type, sinks, options) {
     var ctor;
     switch (type) {
+      /*
       case 'allexdata+bank':
         ctor = dataSourceRegistry.AllexDataPlusBank;
         break;
+        */
       case 'allexdata+leveldb':
         ctor = dataSourceRegistry.AllexDataPlusLevelDB;
         break;
@@ -643,38 +645,6 @@ function createAllexCommandDataWaiter(execlib, JSData) {
 module.exports = createAllexCommandDataWaiter;
 
 },{}],6:[function(require,module,exports){
-function createAllexDataPlusBankDataSource(execlib, AllexDataPlusLevelDB) {
-  'use strict';
-
-  var lib = execlib.lib,
-    taskRegistry = execlib.execSuite.taskRegistry,
-    q = lib.q;
-
-  function AllexDataPlusBank (sinks, options) {
-    if (!sinks.hasOwnProperty('bank')) {
-      throw new lib.Error('NO_BANK_SINK_IN_SINKS');
-    }
-
-    options.valuefilter = this._valuefilter.bind(this);
-    options.valuename = options.balancename || 'balance';
-
-    AllexDataPlusLevelDB.call(this, {
-      data : sinks.data,
-      leveldb : sinks.bank
-    },options);
-  }
-  lib.inherit(AllexDataPlusBank, AllexDataPlusLevelDB);
-
-  AllexDataPlusBank.prototype._valuefilter = function (val) {
-    return val[0];
-  };
-
-  return AllexDataPlusBank;
-}
-
-module.exports = createAllexDataPlusBankDataSource;
-
-},{}],7:[function(require,module,exports){
 function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
   'use strict';
 
@@ -682,6 +652,9 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     taskRegistry = execlib.execSuite.taskRegistry,
     q = lib.q;
 
+  function passthru (item) {
+    return item;
+  }
   function AllexDataPlusLevelDB (sinks, options) {
     if (!sinks.hasOwnProperty('data')) {
       throw new lib.Error('NO_DATA_SINK_IN_SINKS');
@@ -696,7 +669,8 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     this.leveldbsink = sinks.leveldb;
     this.pk = options.primarykey;
     this.valuename = options.valuename || 'value';
-    this.valuefilter = options.valuefilter || lib.dummyFunc;
+    this.keyfilter = options.keyfilter || passthru;
+    this.valuefilter = options.valuefilter || passthru;
     this.data = [];
     this.map = new lib.Map();
   }
@@ -711,6 +685,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     this.pk = null;
     this.leveldbsink = null;
     this.valuefilter = null;
+    this.keyfilter = null;
     DataSourceTaskBase.prototype.destroy.call(this);
   };
   AllexDataPlusLevelDB.prototype._doStartTask = function (tasksink) {
@@ -730,7 +705,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     );
   };
   AllexDataPlusLevelDB.prototype.onLeveldbSink = function (leveldbsink) {
-    leveldbsink.consumeChannel('l', this.onBalance.bind(this));
+    leveldbsink.consumeChannel('l', this.onLevelDBData.bind(this));
     //accounts? zaista?
     leveldbsink.sessionCall('hook', {scan: true, accounts: ['***']});
     return q.resolve(true);
@@ -739,9 +714,10 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     this.map.traverse(this.valuer.bind(this));
     this.target.set('data', this.data.slice());
   };
-  AllexDataPlusLevelDB.prototype.onBalance = function (uservaluearry) {
-    this.map.replace(uservaluearry[0], this.valuefilter(uservaluearry[1]));
-    this.valuer(this.valuefilter(uservaluearry[1]), uservaluearry[0]);
+  AllexDataPlusLevelDB.prototype.onLevelDBData = function (uservaluearry) {
+    var k = this.keyfilter(uservaluearry[0]), v = this.valuefilter(uservaluearry[1]);
+    this.map.replace(k, v);
+    this.valuer(v, k);
     this.target.set('data', this.data.slice());
   };
   AllexDataPlusLevelDB.prototype.valuer = function (value, pk) {
@@ -760,7 +736,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
 
 module.exports = createAllexDataPlusLevelDBDataSource;
 
-},{}],8:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
   'use strict';
 
@@ -803,7 +779,7 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
 
 module.exports = createAllexDataQueryDataSource;
 
-},{}],9:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 function createAllexHash2ArrayDataSource (execlib, AllexState) {
   'use strict';
 
@@ -845,7 +821,7 @@ function createAllexHash2ArrayDataSource (execlib, AllexState) {
 
 module.exports = createAllexHash2ArrayDataSource;
 
-},{}],10:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 function createAllexStateDataSource (execlib, DataSourceBase) {
   'use strict';
 
@@ -892,7 +868,7 @@ function createAllexStateDataSource (execlib, DataSourceBase) {
 
 module.exports = createAllexStateDataSource;
 
-},{}],11:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 function createDataSourceBase (execlib) {
   'use strict';
 
@@ -922,7 +898,7 @@ function createDataSourceBase (execlib) {
 
 module.exports = createDataSourceBase;
 
-},{}],12:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 function createDataSourceRegistry (execlib) {
   'use strict';
   var DataSourceBase = require('./basecreator')(execlib),
@@ -931,7 +907,7 @@ function createDataSourceRegistry (execlib) {
     AllexHash2Array = require('./allexhash2arraycreator')(execlib, AllexState),
     AllexDataQuery = require('./allexdataquerycreator')(execlib, DataSourceTaskBase),
     AllexDataPlusLevelDB = require('./allexdataplusleveldbcreator')(execlib, DataSourceTaskBase),
-    AllexDataPlusBank = require('./allexdataplusbankcreator')(execlib, AllexDataPlusLevelDB),
+    //AllexDataPlusBank = require('./allexdataplusbankcreator')(execlib, AllexDataPlusLevelDB),
     JSData = require('./jsdatacreator')(execlib, DataSourceBase),
     AllexCommandDataWaiter = require('./allexcommanddatawaitercreator')(execlib, JSData);
 
@@ -940,7 +916,7 @@ function createDataSourceRegistry (execlib) {
     AllexHash2Array: AllexHash2Array,
     AllexDataQuery: AllexDataQuery,
     AllexDataPlusLevelDB : AllexDataPlusLevelDB,
-    AllexDataPlusBank: AllexDataPlusBank,
+    //AllexDataPlusBank: AllexDataPlusBank,
     JSData: JSData,
     AllexCommandDataWaiter: AllexCommandDataWaiter
   };
@@ -948,7 +924,7 @@ function createDataSourceRegistry (execlib) {
 
 module.exports = createDataSourceRegistry;
 
-},{"./allexcommanddatawaitercreator":5,"./allexdataplusbankcreator":6,"./allexdataplusleveldbcreator":7,"./allexdataquerycreator":8,"./allexhash2arraycreator":9,"./allexstatecreator":10,"./basecreator":11,"./jsdatacreator":13,"./taskbasecreator":14}],13:[function(require,module,exports){
+},{"./allexcommanddatawaitercreator":5,"./allexdataplusleveldbcreator":6,"./allexdataquerycreator":7,"./allexhash2arraycreator":8,"./allexstatecreator":9,"./basecreator":10,"./jsdatacreator":12,"./taskbasecreator":13}],12:[function(require,module,exports){
 function createJSDataDataSource(execlib, DataSourceBase) {
   'use strict';
 
@@ -990,7 +966,7 @@ function createJSDataDataSource(execlib, DataSourceBase) {
 
 module.exports = createJSDataDataSource;
 
-},{}],14:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 function createDataSourceTaskBase (execlib, DataSourceBase) {
   'use strict';
 
@@ -1070,7 +1046,7 @@ function createDataSourceTaskBase (execlib, DataSourceBase) {
 module.exports = createDataSourceTaskBase;
 
 
-},{}],15:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 (function (global){
 function createLib (execlib) {
   return execlib.loadDependencies('client', ['allex:leveldb:lib'], createEnvironmentFactory.bind(null, execlib));
@@ -1110,7 +1086,7 @@ function createEnvironmentFactory (execlib, leveldblib) {
 module.exports = createLib;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./allexcreator":2,"./allexremotecreator":3,"./basecreator":4,"./datasources":12,"./userrepresentationcreator":16}],16:[function(require,module,exports){
+},{"./allexcreator":2,"./allexremotecreator":3,"./basecreator":4,"./datasources":11,"./userrepresentationcreator":15}],15:[function(require,module,exports){
 function createUserRepresentation(execlib) {
   'use strict';
   var lib = execlib.lib,
