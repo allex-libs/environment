@@ -721,11 +721,24 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     this.target.set('data', this.data.slice());
   };
   AllexDataPlusLevelDB.prototype.valuer = function (value, pk) {
-    var data = this.data, dl = data.length, i, d;
+    var data = this.data, dl = data.length, i, d, j, vn;
     for (i=0; i<dl; i++) {
       d = data[i];
       if (d[this.pk] === pk) {
-        d[this.valuename] = value;
+        if (lib.isArray(this.valuename)) {
+          for (j=0; j<this.valuename.length; j++) {
+            vn = this.valuename[j];
+            d[vn] = value[vn];
+          }
+        } else if ('object' === typeof this.valuename) {
+          for (j in this.valuename) {
+            if (this.valuename.hasOwnProperty(j)) {
+              d[this.valuename[j]] = value[j];
+            }
+          }
+        } else {
+          d[this.valuename] = value;
+        }
         return;
       }
     }
