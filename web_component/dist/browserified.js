@@ -2,7 +2,7 @@
 ALLEX.execSuite.libRegistry.register('allex_environmentlib',require('./src/index')(ALLEX));
 ALLEX.WEB_COMPONENTS.allex_environmentlib = ALLEX.execSuite.libRegistry.get('allex_environmentlib');
 
-},{"./src/index":14}],2:[function(require,module,exports){
+},{"./src/index":15}],2:[function(require,module,exports){
 function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
   'use strict';
 
@@ -14,10 +14,10 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
   }
   lib.inherit (AllexEnvironment, EnvironmentBase);
   AllexEnvironment.prototype.createDataSource = function (type, options) {
-    if (options.sinks) {
+    if (options && options.sinks) {
       return this.createMultiSinkDataSource (type, options);
     }
-    if (!options.sink) {
+    if (!options || !options.sink) {
       return this.createSinkLessSource (type, options);
     }
     return this.findSink(options.sink).then(
@@ -80,6 +80,7 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
       d.resolve(true);
       d = null;
     });
+    //d.promise.done (console.log.bind(console, 'got sink', sinkname), console.log.bind(console, 'failed sink', sinkname));
     promises.push(d.promise);
   }
 
@@ -101,6 +102,9 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
         */
       case 'allexdata+leveldb':
         ctor = dataSourceRegistry.AllexDataPlusLevelDB;
+        break;
+      case 'allexdata+data':
+        ctor = dataSourceRegistry.AllexDataPlusData;
         break;
       default:
         throw new lib.Error('DATASOURCE_TYPE_NOT_APPLICABLE_TO_ALLEX_ENVIRONMENT', type);
@@ -645,6 +649,232 @@ function createAllexCommandDataWaiter(execlib, JSData) {
 module.exports = createAllexCommandDataWaiter;
 
 },{}],6:[function(require,module,exports){
+function createAllexDataPlusDataSource (execlib, DataSourceBase) {
+  'use strict';
+  var lib = execlib.lib,
+    taskRegistry = execlib.execSuite.taskRegistry,
+    q = lib.q,
+    unique = lib.arryOperations.unique, 
+    difference = lib.arryOperations.difference;
+
+
+  function AllexDataPlusData (sinks, options) {
+    if (!sinks.hasOwnProperty('keys')) {
+      throw new lib.Error('NO_DATA_SINK_IN_SINKS');
+    }
+    if (!sinks.hasOwnProperty('values')) {
+      throw new lib.Error('NO_FETCH_SINK_IN_SINKS');
+    }
+
+    if (!options.hasOwnProperty('key_fields')){
+      throw new lib.Error('NO_KEY_FIELDS');
+    }
+
+    DataSourceBase.call(this, sinks.keys, options);
+    this.keys_sink = sinks.keys;
+    this.values_sink = sinks.values;
+    this._should_stop = null;
+    this._tasks_starting = null;
+    this.keys_task = null;
+    this.key_fields = lib.isString(options.key_fields) ? options.key_fields.split(',') : options.key_fields;
+
+    this.key_vals = {};
+    for (var i in this.key_fields){
+      this.key_vals[this.key_fields[i]] = [];
+    }
+    this.values_task = null;
+    this.left_side_data = [];
+    this.right_side_data = [];
+    this._keys = null;
+    this.key_indices_map = null;
+    this.data = [];
+  }
+
+  lib.inherit (AllexDataPlusData, DataSourceBase);
+  AllexDataPlusData.prototype.destroy = function () {
+    this.stop();
+    this.key_vals = null;
+    this.key_fields = null;
+    this.keys = null;
+    this.left_side_data = null;
+    this.right_side_data = null;
+    this.keys_sink = null;
+    this.values_sink = null;
+    this.keys_task = null;
+    this.values_task = null;
+    this._should_stop = null;
+    this._tasks_starting = null;
+    this.data = null;
+    DataSourceBase.prototype.destroy.call(this);
+  };
+
+
+  AllexDataPlusData.prototype.setTarget = function (target){
+    if (!this.keys_sink) console.warn ('No keys sink');
+    if (!this.values_sink) console.warn ('No values sink');
+
+    DataSourceBase.prototype.setTarget.call(this, target);
+    if (target) {
+      this.start();
+    }else{
+      this.stop();
+    }
+  };
+
+
+  AllexDataPlusData.prototype.start = function () {
+    if (!this.keys_sink || !this.values_sink) return;
+    if (this._tasks_starting) return this._tasks_starting;
+    this._should_stop = false;
+
+    this._tasks_starting = this.keys_sink.waitForSink()
+      .then(this.onKeysSinkReady.bind(this))
+      .then(this.values_sink.waitForSink.bind(this.values_sink))
+      .then(this.onSinksReady.bind(this));
+  };
+
+  AllexDataPlusData.prototype.stop = function () {
+    this._should_stop = true;
+    this._tasks_starting = null;
+    if (this.keys_task) {
+      this.keys_task.destroy();
+    }
+    this.keys_task = null;
+    if (this.values_task){
+      this.values_task.destroy();
+    }
+    this.values_task = null;
+    this.key_indices_map.destroy();
+    this.key_indices_map = null;
+  };
+
+  AllexDataPlusData.prototype.onSinksReady = function (keysink){
+  };
+
+  AllexDataPlusData.prototype.onKeysSinkReady = function (keysink){
+    this.keys_task = taskRegistry.run ('materializeQuery', {
+      sink : keysink,
+      data : this.left_side_data,
+      onInitiated : this._process_left_side.bind(this),
+      onNewRecord : this._process_left_side.bind(this),
+      onDelete : this._process_left_side.bind(this),
+      onUpdate : this._process_left_side.bind(this),
+      continuous : true,
+      filter : this.filter
+    });
+    return q.resolve('ok');
+  };
+
+  function valuize (data, key) {
+    return data[key];
+  }
+  function toMapKey (fields, data) {
+    return JSON.stringify(fields.map (valuize.bind(null, data)))
+  }
+
+
+  AllexDataPlusData.prototype._process_left_side = function () {
+    this.data.splice(0, this.data.length);
+    var km = new lib.Map(), 
+      ld,
+      list, //list of values for 'in' filter for fetch ... 
+      map_key,
+      fieldname,
+      i,
+      j;
+
+
+    if (this.key_indices_map) this.key_indices_map.destroy();
+    this.key_indices_map = new lib.Map();
+
+    for (i = 0; i < this.left_side_data.length; i++){
+      ld = this.left_side_data[i];
+
+      for (j = 0; j < this.key_fields.length; j++){
+        fieldname = this.key_fields[j];
+        list = km.get(fieldname);
+        if (!list) {
+          list = [];
+          km.add(fieldname, list);
+        }
+        list.push (ld[fieldname]);
+      }
+      try {
+        this.key_indices_map.add (toMapKey(this.key_fields, ld), i);
+      }catch (e) {
+        console.warn('Duplicate detected in left side data ...', map_key, e);
+      }
+      this.data[i] = ld;
+    }
+    var changed = false, field;
+
+    for (i in this.key_fields){
+      field = this.key_fields[i];
+      list = km.get(field);
+
+      if (!this.key_vals[field] && list){
+        changed = true;
+      }
+
+      if (this.key_vals[field] && !list) {
+        changed = true;
+      }
+
+
+      if (!changed) {
+        field = this.key_fields[i];
+        if (this.key_vals[field].length !== list.length || difference(this.key_vals[field], list).length)
+        {
+          changed = true;
+        }
+      }
+      this.key_vals[field] = list;
+    }
+
+    if (changed) {
+      this.values_sink.waitForSink().then(this.restartValuesTask.bind(this));
+    }
+  };
+
+  AllexDataPlusData.prototype.restartValuesTask = function (sink) {
+    if (this.values_task) {
+      this.values_task.destroy();
+    }
+    this.values_task = taskRegistry.run ('materializeQuery', {
+      sink : sink,
+      data : this.right_side_data,
+      onInitiated : this._join_values.bind(this),
+      onNewRecord : this._join_values.bind(this),
+      onDelete : this._join_values.bind(this),
+      onUpdate : this._join_values.bind(this),
+      continuous : true,
+      filter : null ///TODO: ovde si stao ... kako da napises filtar
+    });
+  };
+
+  AllexDataPlusData.prototype._join_values = function () {
+    var i = 0, 
+      rsd,
+      key,
+      index;
+    for (var i = 0; i < this.right_side_data.length; i++) {
+      rsd = this.right_side_data[i];
+      key = toMapKey (this.key_fields, rsd);
+      index = this.key_indices_map.get(key);
+
+      if (lib.isUndef(index)) continue;
+      this.data[index] = lib.extend (this.left_side_data[index], rsd);
+    }
+    console.log('SAMO DA TE VIDIM ...', this.data);
+    this.target.set('data', this.data.slice());
+  };
+
+  return AllexDataPlusData;
+}
+
+module.exports = createAllexDataPlusDataSource;
+
+},{}],7:[function(require,module,exports){
 function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
   'use strict';
 
@@ -749,7 +979,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
 
 module.exports = createAllexDataPlusLevelDBDataSource;
 
-},{}],7:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
   'use strict';
 
@@ -792,7 +1022,7 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
 
 module.exports = createAllexDataQueryDataSource;
 
-},{}],8:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 function createAllexHash2ArrayDataSource (execlib, AllexState) {
   'use strict';
 
@@ -834,7 +1064,7 @@ function createAllexHash2ArrayDataSource (execlib, AllexState) {
 
 module.exports = createAllexHash2ArrayDataSource;
 
-},{}],9:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 function createAllexStateDataSource (execlib, DataSourceBase) {
   'use strict';
 
@@ -881,7 +1111,7 @@ function createAllexStateDataSource (execlib, DataSourceBase) {
 
 module.exports = createAllexStateDataSource;
 
-},{}],10:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 function createDataSourceBase (execlib) {
   'use strict';
 
@@ -911,7 +1141,7 @@ function createDataSourceBase (execlib) {
 
 module.exports = createDataSourceBase;
 
-},{}],11:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 function createDataSourceRegistry (execlib) {
   'use strict';
   var DataSourceBase = require('./basecreator')(execlib),
@@ -920,7 +1150,7 @@ function createDataSourceRegistry (execlib) {
     AllexHash2Array = require('./allexhash2arraycreator')(execlib, AllexState),
     AllexDataQuery = require('./allexdataquerycreator')(execlib, DataSourceTaskBase),
     AllexDataPlusLevelDB = require('./allexdataplusleveldbcreator')(execlib, DataSourceTaskBase),
-    //AllexDataPlusBank = require('./allexdataplusbankcreator')(execlib, AllexDataPlusLevelDB),
+    AllexDataPlusData = require('./allexdataplusdatacreator.js')(execlib, DataSourceBase),
     JSData = require('./jsdatacreator')(execlib, DataSourceBase),
     AllexCommandDataWaiter = require('./allexcommanddatawaitercreator')(execlib, JSData);
 
@@ -929,7 +1159,7 @@ function createDataSourceRegistry (execlib) {
     AllexHash2Array: AllexHash2Array,
     AllexDataQuery: AllexDataQuery,
     AllexDataPlusLevelDB : AllexDataPlusLevelDB,
-    //AllexDataPlusBank: AllexDataPlusBank,
+    AllexDataPlusData : AllexDataPlusData,
     JSData: JSData,
     AllexCommandDataWaiter: AllexCommandDataWaiter
   };
@@ -937,7 +1167,7 @@ function createDataSourceRegistry (execlib) {
 
 module.exports = createDataSourceRegistry;
 
-},{"./allexcommanddatawaitercreator":5,"./allexdataplusleveldbcreator":6,"./allexdataquerycreator":7,"./allexhash2arraycreator":8,"./allexstatecreator":9,"./basecreator":10,"./jsdatacreator":12,"./taskbasecreator":13}],12:[function(require,module,exports){
+},{"./allexcommanddatawaitercreator":5,"./allexdataplusdatacreator.js":6,"./allexdataplusleveldbcreator":7,"./allexdataquerycreator":8,"./allexhash2arraycreator":9,"./allexstatecreator":10,"./basecreator":11,"./jsdatacreator":13,"./taskbasecreator":14}],13:[function(require,module,exports){
 function createJSDataDataSource(execlib, DataSourceBase) {
   'use strict';
 
@@ -945,7 +1175,7 @@ function createJSDataDataSource(execlib, DataSourceBase) {
 
   function JSData (options) {
     DataSourceBase.call(this, options);
-    this.data = options.data;
+    this.data = options ? options.data : null;
   }
   lib.inherit (JSData, DataSourceBase);
   JSData.prototype.destroy = function () {
@@ -979,7 +1209,7 @@ function createJSDataDataSource(execlib, DataSourceBase) {
 
 module.exports = createJSDataDataSource;
 
-},{}],13:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 function createDataSourceTaskBase (execlib, DataSourceBase) {
   'use strict';
 
@@ -1059,7 +1289,7 @@ function createDataSourceTaskBase (execlib, DataSourceBase) {
 module.exports = createDataSourceTaskBase;
 
 
-},{}],14:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 (function (global){
 function createLib (execlib) {
   return execlib.loadDependencies('client', ['allex:leveldb:lib'], createEnvironmentFactory.bind(null, execlib));
@@ -1099,7 +1329,7 @@ function createEnvironmentFactory (execlib, leveldblib) {
 module.exports = createLib;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./allexcreator":2,"./allexremotecreator":3,"./basecreator":4,"./datasources":11,"./userrepresentationcreator":15}],15:[function(require,module,exports){
+},{"./allexcreator":2,"./allexremotecreator":3,"./basecreator":4,"./datasources":12,"./userrepresentationcreator":16}],16:[function(require,module,exports){
 function createUserRepresentation(execlib) {
   'use strict';
   var lib = execlib.lib,

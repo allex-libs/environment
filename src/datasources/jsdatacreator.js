@@ -5,7 +5,7 @@ function createJSDataDataSource(execlib, DataSourceBase) {
 
   function JSData (options) {
     DataSourceBase.call(this, options);
-    this.data = options.data;
+    this.data = options ? options.data : null;
   }
   lib.inherit (JSData, DataSourceBase);
   JSData.prototype.destroy = function () {

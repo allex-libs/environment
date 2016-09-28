@@ -9,10 +9,10 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
   }
   lib.inherit (AllexEnvironment, EnvironmentBase);
   AllexEnvironment.prototype.createDataSource = function (type, options) {
-    if (options.sinks) {
+    if (options && options.sinks) {
       return this.createMultiSinkDataSource (type, options);
     }
-    if (!options.sink) {
+    if (!options || !options.sink) {
       return this.createSinkLessSource (type, options);
     }
     return this.findSink(options.sink).then(
@@ -75,6 +75,7 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
       d.resolve(true);
       d = null;
     });
+    //d.promise.done (console.log.bind(console, 'got sink', sinkname), console.log.bind(console, 'failed sink', sinkname));
     promises.push(d.promise);
   }
 
@@ -96,6 +97,9 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
         */
       case 'allexdata+leveldb':
         ctor = dataSourceRegistry.AllexDataPlusLevelDB;
+        break;
+      case 'allexdata+data':
+        ctor = dataSourceRegistry.AllexDataPlusData;
         break;
       default:
         throw new lib.Error('DATASOURCE_TYPE_NOT_APPLICABLE_TO_ALLEX_ENVIRONMENT', type);
