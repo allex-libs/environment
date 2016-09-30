@@ -265,6 +265,10 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
       try {
         var response = JSON.parse(response),
           protocol = protocolSecurer('ws');
+        if (response.error && response.error==='NO_TARGETS_YET') {
+          lib.runNext(this.sendLetMeInRequest.bind(this, credentials, defer), lib.intervals.Second);
+          return;
+        }
         if (!(response.ipaddress && response.port && response.session)) {
           this.giveUp(credentials, defer);
           return;
