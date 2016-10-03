@@ -1,4 +1,4 @@
-function createEnvironmentBase (execlib, dataSourceRegistry) {
+function createEnvironmentBase (execlib, leveldblib) {
   'use strict';
 
   var lib = execlib.lib,
@@ -6,9 +6,27 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     Configurable = lib.Configurable,
     ChangeableListenable = lib.ChangeableListenable;
 
+  function InMemStorage () {
+    this.map = new lib.Map();
+  }
+  InMemStorage.prototype.destroy = function () {
+    if (this.map) {
+      this.map.destroy();
+    }
+    this.map = null;
+  };
+  InMemStorage.prototype.put = function (name, val) {
+    this.map.replace(name, val);
+    return q(val);
+  }
+  InMemStorage.prototype.get = function (name) {
+    return q(this.map.get(name));
+  };
+
   function EnvironmentBase (config) {
     ChangeableListenable.call(this);
     Configurable.call(this, config);
+    this.storages = new lib.DIContainer();
     this.dataSources = new lib.DIContainer();
     this.commands = new lib.Map();
     this.state = null;
@@ -125,6 +143,62 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     if (dss) {
       dss.traverse(unregisterer.bind(null, dss));
     }
+  };
+  EnvironmentBase.prototype.createStorage = function (storagename) {
+    var s = this.storages.get(storagename), d;
+    if (s) {
+      return q(s);
+    }
+    d = q.defer();
+    d.promise.then(this.onStorage.bind(this, storagename), this.onNoStorage.bind(this, storagename));
+    new leveldblib.LevelDBHandler({
+      starteddefer:d,
+      maxretries:3,
+      dbname: storagename,
+      dbcreationoptions: {
+        valueEncoding: 'json'
+      }
+    });
+    return this.storages.waitFor(storagename);
+  };
+  EnvironmentBase.prototype.onStorage = function (storagename, storage) {
+    this.storages.register(storagename, storage);
+    return storage;
+  };
+  EnvironmentBase.prototype.onNoStorage = function (storagename, reason) {
+    var storage = new InMemStorage();
+    this.storages.register(storagename, storage);
+    return storage;
+  };
+  EnvironmentBase.prototype.putToStorage = function (storagename, key, value) {
+    return this.storages.waitFor(storagename).then(function (storage) {
+      var ret = storage.put(key, value);
+      key = null;
+      value = null;
+      return ret;
+    });
+  };
+  EnvironmentBase.prototype.getFromStorage = function (storagename, key) {
+    return this.storages.waitFor(storagename).then(function (storage) {
+      var ret = storage.get(key);
+      key = null;
+      return ret;
+    });
+  };
+  EnvironmentBase.prototype.getFromStorageSafe = function (storagename, key, deflt) {
+    return this.storages.waitFor(storagename).then(function (storage) {
+      var ret = storage.safeGet(key, deflt);
+      key = null;
+      deflt = null;
+      return ret;
+    });
+  };
+  EnvironmentBase.prototype.delFromStorage = function (storagename, key) {
+    return this.storages.waitFor(storagename).then(function (storage) {
+      var ret = storage.del(key);
+      key = null;
+      return ret;
+    });
   };
   EnvironmentBase.prototype.DEFAULT_CONFIG = lib.dummyFunc;
 
