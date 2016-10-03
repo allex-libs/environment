@@ -31,6 +31,9 @@ function createEnvironmentBase (execlib, leveldblib) {
     this.commands = new lib.Map();
     this.state = null;
     this.error = null;
+    if (config && lib.isArray(config.storages)) {
+      config.storages.forEach(this.createStorage.bind(this));
+    }
   }
   ChangeableListenable.addMethods(EnvironmentBase);
   lib.inherit(EnvironmentBase, ChangeableListenable);
