@@ -869,7 +869,6 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase) {
       if (lib.isUndef(index)) continue;
       this.data[index] = lib.extend (this.left_side_data[index], rsd);
     }
-    console.log('SAMO DA TE VIDIM ...', this.data);
     this.target.set('data', this.data.slice());
   };
 
