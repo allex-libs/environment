@@ -5,10 +5,10 @@ function createLib (execlib) {
 function createEnvironmentFactory (execlib, leveldblib) {
   'use strict';
   var dataSourceRegistry = require('./datasources')(execlib),
-    EnvironmentBase = require('./basecreator')(execlib),
+    EnvironmentBase = require('./basecreator')(execlib, leveldblib),
     UserRepresentation = require('./userrepresentationcreator')(execlib),
     AllexEnvironment = require('./allexcreator')(execlib, dataSourceRegistry, EnvironmentBase),
-    AllexRemoteEnvironment = require('./allexremotecreator')(execlib, leveldblib, dataSourceRegistry, AllexEnvironment, UserRepresentation);
+    AllexRemoteEnvironment = require('./allexremotecreator')(execlib, dataSourceRegistry, AllexEnvironment, UserRepresentation);
 
   function createFromConstructor (ctor, options) {
     if (lib.isFunction (ctor)) return new ctor (options);

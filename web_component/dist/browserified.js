@@ -130,29 +130,13 @@ function protocolSecurer (protocol) {
     return protocol;
 }
 
-function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, AllexEnvironment, UserRepresentation) {
+function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnvironment, UserRepresentation) {
   'use strict';
 
   var lib = execlib.lib,
     q = lib.q,
-    qlib = lib.qlib;
-
-  function InMemStorage () {
-    this.map = new lib.Map();
-  }
-  InMemStorage.prototype.destroy = function () {
-    if (this.map) {
-      this.map.destroy();
-    }
-    this.map = null;
-  };
-  InMemStorage.prototype.put = function (name, val) {
-    this.map.replace(name, val);
-    return q(val);
-  }
-  InMemStorage.prototype.get = function (name) {
-    return q(this.map.get(name));
-  };
+    qlib = lib.qlib,
+    remoteStorageName = 'remoteenvironmentstorage';
 
   function AllexRemoteCommand (representation, options) {
     this.representation = null;
@@ -254,27 +238,14 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     this.port = options.entrypoint.port;
     this.identity = options.entrypoint.identity;
     this.userRepresentation = null;
-    this.storage = null;
     this.pendingRequest = false;
-    var d = q.defer();
-    d.promise.then(this.checkForSessionId.bind(this), this.onNoStorage.bind(this));
-    this.set('state', 'pending');
-    this.storage = new leveldblib.LevelDBHandler({
-      starteddefer:d,
-      maxretries:3,
-      dbname: 'remoteenvironmentstorage',
-      dbcreationoptions: {
-        valueEncoding: 'json'
-      }
-    });
     this.credentialsForLogin = null;
+    this.checkForSessionId();
+    this.createStorage(remoteStorageName);
   }
   lib.inherit(AllexRemoteEnvironment, AllexEnvironment);
   AllexRemoteEnvironment.prototype.destroy = function () {
     this.pendingRequest = null;
-    if (this.storage) {
-      this.storage.destroy();
-    }
     if (this.userRepresentation) {
       this.userRepresentation.destroy();
     }
@@ -283,19 +254,9 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     this.port = null;
     this.address = null;
   };
-  AllexRemoteEnvironment.prototype.onNoStorage = function () {
-    if (this.storage) {
-      this.storage.destroy();
-    }
-    this.storage = new InMemStorage();
-    this.checkForSessionId();
-  };
   AllexRemoteEnvironment.prototype.checkForSessionId = function () {
-    if (!this.storage) {
-      return;
-    }
     this.set('state', 'pending');
-    this.storage.get('sessionid').then(
+    this.getFromStorage(remoteStorageName, 'sessionid').then(
       this.onSessionId.bind(this),
       this.set.bind(this, 'state', 'loggedout')
     );
@@ -438,7 +399,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
       this.checkForSessionId();
       return;
     }
-    return qlib.promise2defer(this.storage.put('sessionid', {sessionid: sessionid, token: lib.uid()}).then(
+    return qlib.promise2defer(this.putToStorage(remoteStorageName, 'sessionid', {sessionid: sessionid, token: lib.uid()}).then(
       this.onSessionIdSaved.bind(this)
     ), defer);
     //return qlib.promise2defer(q(this.set('state', 'established')), defer);
@@ -450,13 +411,13 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
   AllexRemoteEnvironment.prototype.giveUp = function (credentials, defer) {
     this.credentialsForLogin = null;
     this.set('state', 'loggedout');
-    this.storage.del('sessionid').then (
+    this.delFromStorage(remoteStorageName, 'sessionid').then (
       defer.reject.bind(defer, new lib.JSONizingError('INVALID_LOGIN', credentials, 'Invalid'))
     );
   };
   AllexRemoteEnvironment.prototype.logout = function () {
     console.log('will logout');
-    this.storage.get('sessionid').then(
+    this.getFromStorage(remoteStorageName, 'sessionid').then(
       this.doDaLogout.bind(this),
       this.set.bind(this, 'state', 'loggedout')
     );
@@ -493,7 +454,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
 module.exports = createAllexRemoteEnvironment;
 
 },{}],4:[function(require,module,exports){
-function createEnvironmentBase (execlib, dataSourceRegistry) {
+function createEnvironmentBase (execlib, leveldblib) {
   'use strict';
 
   var lib = execlib.lib,
@@ -501,13 +462,34 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     Configurable = lib.Configurable,
     ChangeableListenable = lib.ChangeableListenable;
 
+  function InMemStorage () {
+    this.map = new lib.Map();
+  }
+  InMemStorage.prototype.destroy = function () {
+    if (this.map) {
+      this.map.destroy();
+    }
+    this.map = null;
+  };
+  InMemStorage.prototype.put = function (name, val) {
+    this.map.replace(name, val);
+    return q(val);
+  }
+  InMemStorage.prototype.get = function (name) {
+    return q(this.map.get(name));
+  };
+
   function EnvironmentBase (config) {
     ChangeableListenable.call(this);
     Configurable.call(this, config);
+    this.storages = new lib.DIContainer();
     this.dataSources = new lib.DIContainer();
     this.commands = new lib.Map();
     this.state = null;
     this.error = null;
+    if (config && lib.isArray(config.storages)) {
+      config.storages.forEach(this.createStorage.bind(this));
+    }
   }
   ChangeableListenable.addMethods(EnvironmentBase);
   lib.inherit(EnvironmentBase, ChangeableListenable);
@@ -620,6 +602,62 @@ function createEnvironmentBase (execlib, dataSourceRegistry) {
     if (dss) {
       dss.traverse(unregisterer.bind(null, dss));
     }
+  };
+  EnvironmentBase.prototype.createStorage = function (storagename) {
+    var s = this.storages.get(storagename), d;
+    if (s) {
+      return q(s);
+    }
+    d = q.defer();
+    d.promise.then(this.onStorage.bind(this, storagename), this.onNoStorage.bind(this, storagename));
+    new leveldblib.LevelDBHandler({
+      starteddefer:d,
+      maxretries:3,
+      dbname: storagename,
+      dbcreationoptions: {
+        valueEncoding: 'json'
+      }
+    });
+    return this.storages.waitFor(storagename);
+  };
+  EnvironmentBase.prototype.onStorage = function (storagename, storage) {
+    this.storages.register(storagename, storage);
+    return storage;
+  };
+  EnvironmentBase.prototype.onNoStorage = function (storagename, reason) {
+    var storage = new InMemStorage();
+    this.storages.register(storagename, storage);
+    return storage;
+  };
+  EnvironmentBase.prototype.putToStorage = function (storagename, key, value) {
+    return this.storages.waitFor(storagename).then(function (storage) {
+      var ret = storage.put(key, value);
+      key = null;
+      value = null;
+      return ret;
+    });
+  };
+  EnvironmentBase.prototype.getFromStorage = function (storagename, key) {
+    return this.storages.waitFor(storagename).then(function (storage) {
+      var ret = storage.get(key);
+      key = null;
+      return ret;
+    });
+  };
+  EnvironmentBase.prototype.getFromStorageSafe = function (storagename, key, deflt) {
+    return this.storages.waitFor(storagename).then(function (storage) {
+      var ret = storage.safeGet(key, deflt);
+      key = null;
+      deflt = null;
+      return ret;
+    });
+  };
+  EnvironmentBase.prototype.delFromStorage = function (storagename, key) {
+    return this.storages.waitFor(storagename).then(function (storage) {
+      var ret = storage.del(key);
+      key = null;
+      return ret;
+    });
   };
   EnvironmentBase.prototype.DEFAULT_CONFIG = lib.dummyFunc;
 
@@ -1301,10 +1339,10 @@ function createLib (execlib) {
 function createEnvironmentFactory (execlib, leveldblib) {
   'use strict';
   var dataSourceRegistry = require('./datasources')(execlib),
-    EnvironmentBase = require('./basecreator')(execlib),
+    EnvironmentBase = require('./basecreator')(execlib, leveldblib),
     UserRepresentation = require('./userrepresentationcreator')(execlib),
     AllexEnvironment = require('./allexcreator')(execlib, dataSourceRegistry, EnvironmentBase),
-    AllexRemoteEnvironment = require('./allexremotecreator')(execlib, leveldblib, dataSourceRegistry, AllexEnvironment, UserRepresentation);
+    AllexRemoteEnvironment = require('./allexremotecreator')(execlib, dataSourceRegistry, AllexEnvironment, UserRepresentation);
 
   function createFromConstructor (ctor, options) {
     if (lib.isFunction (ctor)) return new ctor (options);

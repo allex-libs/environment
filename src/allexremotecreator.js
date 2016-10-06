@@ -5,29 +5,13 @@ function protocolSecurer (protocol) {
     return protocol;
 }
 
-function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, AllexEnvironment, UserRepresentation) {
+function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnvironment, UserRepresentation) {
   'use strict';
 
   var lib = execlib.lib,
     q = lib.q,
-    qlib = lib.qlib;
-
-  function InMemStorage () {
-    this.map = new lib.Map();
-  }
-  InMemStorage.prototype.destroy = function () {
-    if (this.map) {
-      this.map.destroy();
-    }
-    this.map = null;
-  };
-  InMemStorage.prototype.put = function (name, val) {
-    this.map.replace(name, val);
-    return q(val);
-  }
-  InMemStorage.prototype.get = function (name) {
-    return q(this.map.get(name));
-  };
+    qlib = lib.qlib,
+    remoteStorageName = 'remoteenvironmentstorage';
 
   function AllexRemoteCommand (representation, options) {
     this.representation = null;
@@ -129,27 +113,14 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     this.port = options.entrypoint.port;
     this.identity = options.entrypoint.identity;
     this.userRepresentation = null;
-    this.storage = null;
     this.pendingRequest = false;
-    var d = q.defer();
-    d.promise.then(this.checkForSessionId.bind(this), this.onNoStorage.bind(this));
-    this.set('state', 'pending');
-    this.storage = new leveldblib.LevelDBHandler({
-      starteddefer:d,
-      maxretries:3,
-      dbname: 'remoteenvironmentstorage',
-      dbcreationoptions: {
-        valueEncoding: 'json'
-      }
-    });
     this.credentialsForLogin = null;
+    this.checkForSessionId();
+    this.createStorage(remoteStorageName);
   }
   lib.inherit(AllexRemoteEnvironment, AllexEnvironment);
   AllexRemoteEnvironment.prototype.destroy = function () {
     this.pendingRequest = null;
-    if (this.storage) {
-      this.storage.destroy();
-    }
     if (this.userRepresentation) {
       this.userRepresentation.destroy();
     }
@@ -158,19 +129,9 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
     this.port = null;
     this.address = null;
   };
-  AllexRemoteEnvironment.prototype.onNoStorage = function () {
-    if (this.storage) {
-      this.storage.destroy();
-    }
-    this.storage = new InMemStorage();
-    this.checkForSessionId();
-  };
   AllexRemoteEnvironment.prototype.checkForSessionId = function () {
-    if (!this.storage) {
-      return;
-    }
     this.set('state', 'pending');
-    this.storage.get('sessionid').then(
+    this.getFromStorage(remoteStorageName, 'sessionid').then(
       this.onSessionId.bind(this),
       this.set.bind(this, 'state', 'loggedout')
     );
@@ -313,7 +274,7 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
       this.checkForSessionId();
       return;
     }
-    return qlib.promise2defer(this.storage.put('sessionid', {sessionid: sessionid, token: lib.uid()}).then(
+    return qlib.promise2defer(this.putToStorage(remoteStorageName, 'sessionid', {sessionid: sessionid, token: lib.uid()}).then(
       this.onSessionIdSaved.bind(this)
     ), defer);
     //return qlib.promise2defer(q(this.set('state', 'established')), defer);
@@ -325,13 +286,13 @@ function createAllexRemoteEnvironment (execlib, leveldblib, dataSourceRegistry, 
   AllexRemoteEnvironment.prototype.giveUp = function (credentials, defer) {
     this.credentialsForLogin = null;
     this.set('state', 'loggedout');
-    this.storage.del('sessionid').then (
+    this.delFromStorage(remoteStorageName, 'sessionid').then (
       defer.reject.bind(defer, new lib.JSONizingError('INVALID_LOGIN', credentials, 'Invalid'))
     );
   };
   AllexRemoteEnvironment.prototype.logout = function () {
     console.log('will logout');
-    this.storage.get('sessionid').then(
+    this.getFromStorage(remoteStorageName, 'sessionid').then(
       this.doDaLogout.bind(this),
       this.set.bind(this, 'state', 'loggedout')
     );
