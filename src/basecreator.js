@@ -31,6 +31,7 @@ function createEnvironmentBase (execlib, leveldblib) {
     this.commands = new lib.Map();
     this.state = null;
     this.error = null;
+    this.operation = null;
     if (config && lib.isArray(config.storages)) {
       config.storages.forEach(this.createStorage.bind(this));
     }
@@ -39,6 +40,7 @@ function createEnvironmentBase (execlib, leveldblib) {
   lib.inherit(EnvironmentBase, ChangeableListenable);
   Configurable.addMethods(EnvironmentBase);
   EnvironmentBase.prototype.destroy = function () {
+    this.operation = null;
     this.error = null;
     this.state = null;
     if (this.commands) {
