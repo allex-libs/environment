@@ -142,7 +142,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
   };
   AllexRemoteEnvironment.prototype.onHotelSinkDestroyed = function () {
     this.purgeHotelSinkDestroyedListener();
-    this.checkForSessionId();
+    lib.runNext(this.checkForSessionId.bind(this), 100+Math.random()*1000);
   };
   AllexRemoteEnvironment.prototype.purgeApartmentSinkDestroyedListener = function () {
     if (this.apartmentSinkDestroyedListener) {
@@ -152,7 +152,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
   };
   AllexRemoteEnvironment.prototype.onApartmentSinkDestroyed = function () {
     this.purgeApartmentSinkDestroyedListener();
-    this.checkForSessionId();
+    lib.runNext(this.checkForSessionId.bind(this), 100+Math.random()*1000);
   };
   AllexRemoteEnvironment.prototype.checkForSessionId = function (defer) {
     this.set('state', 'pending');
@@ -170,9 +170,6 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.set('state', 'loggedout');
     defer = null;
   };
-  AllexRemoteEnvironment.prototype.checkForSessionIdLater = function () {
-    lib.runNext(this.checkForSessionId.bind(this), 32000);
-  };
   AllexRemoteEnvironment.prototype.onSessionId = function (defer, sessionid) {
     if (!sessionid) {
       if (defer) {
@@ -184,11 +181,22 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.login({session: sessionid.sessionid}, defer);
     defer = null;
   };
+  function callWebMethodResolver(defer,res){
+    if (res.status === 200){
+      if (!!res.response){
+        defer.resolve(JSON.parse(res.response));
+      }else{
+        defer.resolve('NO_RESPONSE');
+      }
+    }else{
+      defer.reject(new lib.Error('CALL_WEB_METHOD_ERROR'));
+    }
+  }
   AllexRemoteEnvironment.prototype._callWebMethod = function (methodname, datahash) {
     var d = q.defer();
     lib.request(protocolSecurer('http')+'://'+this.address+':'+this.port+'/'+methodname, {
       parameters: datahash,
-      onComplete: d.resolve.bind(d),
+      onComplete: callWebMethodResolver.bind(null,d),
       onError: d.reject.bind(d)
     });
     return d.promise;
@@ -198,6 +206,10 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     var d = q.defer();
     this.login(datahash, d, 'register');
     return d.promise;
+  };
+  AllexRemoteEnvironment.prototype.usernameExists = function (datahash) {
+    //datahash <=> {username: 'micatatic'}
+    return this._callWebMethod('usernameExists', datahash);
   };
   AllexRemoteEnvironment.prototype.login = function (credentials, defer, entrypointmethod) {
     if (this.credentialsForLogin) {
@@ -270,6 +282,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
   };
   AllexRemoteEnvironment.prototype.retryLetMeInIfStalled = function (pr, d) {
     if (this.pendingRequest === pr) {
+      this.credentialsForLogin = null;
       this.pendingRequest = 0;
       this.checkForSessionId(d);
     }
@@ -363,6 +376,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     return q(this.set('state', 'established'));
   };
   AllexRemoteEnvironment.prototype.giveUp = function (credentials, defer) {
+    this.pendingRequest = 0;
     this.credentialsForLogin = null;
     this.set('state', 'loggedout');
     this.delFromStorage(remoteStorageName, 'sessionid').then (
