@@ -104,10 +104,10 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase) {
     this.keys_task = taskRegistry.run ('materializeQuery', {
       sink : keysink,
       data : this.left_side_data,
-      onInitiated : this._process_left_side.bind(this),
-      onNewRecord : this._process_left_side.bind(this),
-      onDelete : this._process_left_side.bind(this),
-      onUpdate : this._process_left_side.bind(this),
+      onInitiated : this._process_left_side.bind(this, 'init'),
+      onNewRecord : this._process_left_side.bind(this, 'new'),
+      onDelete : this._process_left_side.bind(this, 'delete'),
+      onUpdate : this._process_left_side.bind(this, 'update'),
       continuous : true,
       filter : this.filter
     });
@@ -122,7 +122,7 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase) {
   }
 
 
-  AllexDataPlusData.prototype._process_left_side = function () {
+  AllexDataPlusData.prototype._process_left_side = function (what) {
     this.data.splice(0, this.data.length);
     var km = new lib.Map(), 
       ld,
@@ -130,7 +130,8 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase) {
       map_key,
       fieldname,
       i,
-      j;
+      j,
+      key;
 
 
     if (this.key_indices_map) this.key_indices_map.destroy();
@@ -149,7 +150,12 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase) {
         list.push (ld[fieldname]);
       }
       try {
-        this.key_indices_map.add (toMapKey(this.key_fields, ld), i);
+        key = toMapKey(this.key_fields, ld);
+        if (!lib.isUndef(this.key_indices_map.get(key))) {
+          this.key_indices_map.add (key, i);
+        }else{
+          console.log('==================>>>>', this.left_side_data[i], what);
+        }
       }catch (e) {
         console.warn('Duplicate detected in left side data ...', map_key, e);
       }
