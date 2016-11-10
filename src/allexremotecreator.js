@@ -288,10 +288,16 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     return d.promise;
   };
   AllexRemoteEnvironment.prototype.retryLetMeInIfStalled = function (pr, d) {
+    var cfl;
     if (this.pendingRequest === pr) {
+      cfl = this.credentialsForLogin;
       this.credentialsForLogin = null;
       this.pendingRequest = 0;
-      this.checkForSessionId(d);
+      if (cfl) {
+        this.login(cfl, d);
+      } else {
+        this.checkForSessionId(d);
+      }
     }
   };
   AllexRemoteEnvironment.prototype.onLetMeInResponse = function (pr, credentials, defer, response) {
