@@ -105,6 +105,13 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
   };
 
   function AllexRemoteEnvironment (options) {
+    if (options && options.doNotStoreSession){
+      if (!options) {
+        options = {};
+      }
+      if (!options.blockStorages) options.blockStorages = [];
+      lib.arryOperations.appendNonExistingItems (options.blockStorages, [remoteStorageName]);
+    }
     AllexEnvironment.call(this, options);
     if (!options.entrypoint) {
       throw new lib.JSONizingError('NO_ENTRYPOINT_DESC', options, 'No entrypoint descriptor:');

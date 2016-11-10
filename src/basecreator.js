@@ -32,14 +32,27 @@ function createEnvironmentBase (execlib, leveldblib) {
     this.state = null;
     this.error = null;
     this.operation = null;
-    if (config && lib.isArray(config.storages)) {
-      config.storages.forEach(this.createStorage.bind(this));
+
+    this.blockStorages = null;
+    if (config) {
+      if (lib.isString(config.blockStorages)) {
+        this.blockStorages = blockStorages.split (',');
+      }else{
+        if (lib.isArray(config.blockStorages)){
+          this.blockStorages = config.blockStorages;
+        }
+      }
+      if (lib.isArray(config.storages)) {
+        config.storages.forEach(this.createStorage.bind(this));
+      }
     }
   }
+
   ChangeableListenable.addMethods(EnvironmentBase);
   lib.inherit(EnvironmentBase, ChangeableListenable);
   Configurable.addMethods(EnvironmentBase);
   EnvironmentBase.prototype.destroy = function () {
+    this.blockStorages = null;
     this.operation = null;
     this.error = null;
     this.state = null;
@@ -56,6 +69,11 @@ function createEnvironmentBase (execlib, leveldblib) {
     Configurable.prototype.destroy.call(this);
     ChangeableListenable.prototype.destroy.call(this);
   };
+
+  EnvironmentBase.prototype.isStorageBlocked = function (storagename) {
+    return this.blockStorages && this.blockStorages.indexOf(storagename) > -1;
+  };
+
   EnvironmentBase.prototype.set_state = function (state) {
     if (this.state === state) {
       return false;
@@ -150,6 +168,10 @@ function createEnvironmentBase (execlib, leveldblib) {
     }
   };
   EnvironmentBase.prototype.createStorage = function (storagename) {
+    if (this.isStorageBlocked(storagename)) {
+      ///TODO: check if this is correct ....
+      return q.resolve (null);
+    }
     var s = this.storages.get(storagename), d;
     if (s) {
       return q(s);
@@ -176,6 +198,10 @@ function createEnvironmentBase (execlib, leveldblib) {
     return storage;
   };
   EnvironmentBase.prototype.putToStorage = function (storagename, key, value) {
+    if (this.isStorageBlocked(storagename)) {
+      return q.resolve(null);
+    }
+
     return this.storages.waitFor(storagename).then(function (storage) {
       var ret = storage.put(key, value);
       key = null;
@@ -184,6 +210,10 @@ function createEnvironmentBase (execlib, leveldblib) {
     });
   };
   EnvironmentBase.prototype.getFromStorage = function (storagename, key) {
+    if (this.isStorageBlocked(storagename)){
+      return q.resolve(null);
+    }
+
     return this.storages.waitFor(storagename).then(function (storage) {
       var ret = storage.get(key);
       key = null;
@@ -191,6 +221,10 @@ function createEnvironmentBase (execlib, leveldblib) {
     });
   };
   EnvironmentBase.prototype.getFromStorageSafe = function (storagename, key, deflt) {
+    if (this.isStorageBlocked(storagename)) {
+      return q.resolve(null);
+    }
+
     return this.storages.waitFor(storagename).then(function (storage) {
       var ret = storage.safeGet(key, deflt);
       key = null;
@@ -199,6 +233,10 @@ function createEnvironmentBase (execlib, leveldblib) {
     });
   };
   EnvironmentBase.prototype.delFromStorage = function (storagename, key) {
+    if (this.isStorageBlocked(storagename)) {
+      return q.resolve(null);
+    }
+
     return this.storages.waitFor(storagename).then(function (storage) {
       var ret = storage.del(key);
       key = null;
