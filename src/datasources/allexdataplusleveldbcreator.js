@@ -26,9 +26,11 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     this.valuefilter = options.valuefilter || passthru;
     this.data = [];
     this.map = new lib.Map();
+    this._reconsume = true;
   }
   lib.inherit(AllexDataPlusLevelDB, DataSourceTaskBase);
   AllexDataPlusLevelDB.prototype.destroy = function () {
+    this._reconsume = null;
     if (this.map) {
       this.map.destroy();
     }
@@ -42,6 +44,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     DataSourceTaskBase.prototype.destroy.call(this);
   };
   AllexDataPlusLevelDB.prototype._doStartTask = function (tasksink) {
+    console.log(JSON.stringify(tasksink.recordDescriptor.fields));
     var fire_er = this.fire.bind(this);
     this.task = taskRegistry.run('materializeQuery', {
       sink: tasksink,
@@ -58,6 +61,8 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     );
   };
   AllexDataPlusLevelDB.prototype.onLeveldbSink = function (leveldbsink) {
+    if (!this._reconsume) return q.resolve(true);
+    this._reconsume = false;
     leveldbsink.consumeChannel('l', this.onLevelDBData.bind(this));
     //accounts? zaista?
     leveldbsink.sessionCall('hook', {scan: true, accounts: ['***']});
