@@ -198,10 +198,15 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
   }
   AllexLevelDBStreamerCommand.prototype.onSink = function (args, sink) {
     this.waiter.setData([]);
+    var options = {pagesize: this.pagesize};
+
+    if (args[1]) {
+      options = lib.extend (options, args[1]);
+    }
     return execlib.execSuite.libRegistry.get('allex_leveldblib').streamInSink(
       sink,
       this.methodname,
-      {pagesize: this.pagesize},
+      options,
       this.onLevelDBData.bind(this),
       resolver
     );
