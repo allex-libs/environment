@@ -223,6 +223,11 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     if (this.primarykey){
       ret[this.primarykey] = kv.key;
     }
+
+    if (!kv.value) {
+      this.waiter.appendRecord(ret);
+      return;
+    }
     if (lib.isArray(this.fieldnames)) {
       _ret = ret;
       this.fieldnames.forEach(function (name, index) {
@@ -1412,7 +1417,11 @@ function createJSDataDataSource(execlib, DataSourceBase) {
     this.setData();
   };
 
-  JSData.prototype.setData = function () {
+  JSData.prototype.setData = function (data) {
+    //ovo ovde je prilicno nedosledno ...
+    if (arguments.length) {
+      this.data = data;
+    }
     if (!this.target) {
       return;
     }

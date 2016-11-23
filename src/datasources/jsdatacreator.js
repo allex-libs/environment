@@ -18,7 +18,11 @@ function createJSDataDataSource(execlib, DataSourceBase) {
     this.setData();
   };
 
-  JSData.prototype.setData = function () {
+  JSData.prototype.setData = function (data) {
+    //ovo ovde je prilicno nedosledno ...
+    if (arguments.length) {
+      this.data = data;
+    }
     if (!this.target) {
       return;
     }
