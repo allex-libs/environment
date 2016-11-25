@@ -39,6 +39,9 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
   AllexEnvironment.prototype.onSinkForCreateDataSource = function (type, options, sink) {
     var ctor;
     switch (type) {
+      case 'allexleveldb':
+        ctor = dataSourceRegistry.AllexLevelDB;
+        break;
       case 'allexstate':
         ctor = dataSourceRegistry.AllexState;
         break;
