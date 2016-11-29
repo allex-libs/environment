@@ -44,7 +44,10 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     DataSourceTaskBase.prototype.destroy.call(this);
   };
   AllexDataPlusLevelDB.prototype._doStartTask = function (tasksink) {
-    console.log(JSON.stringify(tasksink.recordDescriptor.fields));
+    if (!this.leveldbsink) {
+      console.warn('No leveldbsink');
+      return;
+    }
     var fire_er = this.fire.bind(this);
     this.task = taskRegistry.run('materializeQuery', {
       sink: tasksink,

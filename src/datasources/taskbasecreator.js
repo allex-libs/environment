@@ -22,6 +22,10 @@ function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
   };
 
   DataSourceTaskBase.prototype._doGoWithSink = function (sink) {
+    if (!sink) {
+      console.warn ('No sink in _doGoWithSink');
+      return;
+    }
     this._doStartTask(sink);
   };
 

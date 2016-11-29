@@ -1024,10 +1024,8 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase) {
       }
       try {
         key = toMapKey(this.key_fields, ld);
-        if (!lib.isUndef(this.key_indices_map.get(key))) {
+        if (lib.isUndef(this.key_indices_map.get(key))) {
           this.key_indices_map.add (key, i);
-        }else{
-          console.log('==================>>>>', this.left_side_data[i], what);
         }
       }catch (e) {
         console.warn('Duplicate detected in left side data ...', map_key, e);
@@ -1148,7 +1146,10 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     DataSourceTaskBase.prototype.destroy.call(this);
   };
   AllexDataPlusLevelDB.prototype._doStartTask = function (tasksink) {
-    console.log(JSON.stringify(tasksink.recordDescriptor.fields));
+    if (!this.leveldbsink) {
+      console.warn('No leveldbsink');
+      return;
+    }
     var fire_er = this.fire.bind(this);
     this.task = taskRegistry.run('materializeQuery', {
       sink: tasksink,
@@ -1582,6 +1583,10 @@ function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
   };
 
   DataSourceTaskBase.prototype._doGoWithSink = function (sink) {
+    if (!sink) {
+      console.warn ('No sink in _doGoWithSink');
+      return;
+    }
     this._doStartTask(sink);
   };
 
