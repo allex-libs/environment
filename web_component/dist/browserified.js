@@ -262,6 +262,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.apartmentSinkDestroyedListener = null;
     this.pendingRequest = 0;
     this.credentialsForLogin = null;
+    this.sessionid = null;
     this.checkForSessionId();
     this.createStorage(remoteStorageName);
   }
@@ -278,6 +279,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.identity = null;
     this.port = null;
     this.address = null;
+    this.sessionid = null;
   };
   AllexRemoteEnvironment.prototype.purgeHotelSinkDestroyedListener = function () {
     if (this.hotelSinkDestroyedListener) {
@@ -316,6 +318,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     defer = null;
   };
   AllexRemoteEnvironment.prototype.onSessionId = function (defer, sessionid) {
+    this.sessionid = sessionid;
     if (!sessionid) {
       if (defer) {
         defer.reject(new lib.Error('NO_SESSION_ID'));
@@ -517,6 +520,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     }
     this.purgeApartmentSinkDestroyedListener();
     this.apartmentSinkDestroyedListener = sink.destroyed.attach(this.onApartmentSinkDestroyed.bind(this));
+    this.sessionid = sessionid;
     return qlib.promise2defer(this.putToStorage(remoteStorageName, 'sessionid', {sessionid: sessionid, token: lib.uid()}).then(
       this.onSessionIdSaved.bind(this)
     ), defer);
@@ -535,18 +539,15 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     );
   };
   AllexRemoteEnvironment.prototype.logout = function () {
+    if (!this.sessionid) return;
+
     console.log('will logout');
     this.set('state', 'pending');
     this.purgeHotelSinkDestroyedListener();
     this.purgeApartmentSinkDestroyedListener();
-    this.getFromStorage(remoteStorageName, 'sessionid').then(
-      this.doDaLogout.bind(this),
-      this.set.bind(this, 'state', 'loggedout')
-    );
+    this.sendLetMeOutRequest({session: this.sessionid});
   };
-  AllexRemoteEnvironment.prototype.doDaLogout = function (sessionid) {
-    return this.sendLetMeOutRequest({session: sessionid.sessionid});
-  };
+
   AllexRemoteEnvironment.prototype.sendLetMeOutRequest = function (credentials, d) {
     d = d || q.defer();
     lib.request(protocolSecurer('http')+'://'+this.address+':'+this.port+'/letMeOut', {
@@ -557,10 +558,12 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     credentials = null;
     return d.promise;
   };
+
   AllexRemoteEnvironment.prototype.onLetMeOutResponse = function (credentials, defer, response) {
     var set = this.set.bind(this);
     console.log('onLetMeOutResponse', response);
     if (response && response.response && response.response === 'ok' ) {
+      this.sessionid = null;
       this.delFromStorage(remoteStorageName, 'sessionid').then (
         function () {
           set('state', 'loggedout');
@@ -579,6 +582,8 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     }
     defer.resolve(true);
   };
+
+
   AllexRemoteEnvironment.prototype.onLetMeOutRequestFail = function (credentials, defer, reason) {
     this.set('error', reason);
     lib.runNext(this.sendLetMeOutRequest.bind(this, credentials, defer), lib.intervals.Second);
