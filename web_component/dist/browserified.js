@@ -1527,7 +1527,9 @@ function createDataSourceSinkBase (execlib, DataSourceBase) {
     }
   };
 
-  DataSourceSinkBase.prototype.stop = lib.dummyFunc;
+  DataSourceSinkBase.prototype.stop = function () {
+    this._starting = null;
+  };
 
   DataSourceSinkBase.prototype.start = function () {
     this._should_stop = false;
@@ -1581,6 +1583,7 @@ function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
   };
 
   DataSourceTaskBase.prototype.stop = function () {
+    DataSourceSinkBase.prototype.stop.call(this);
     if (this.task) {
       this.task.destroy();
     }

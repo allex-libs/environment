@@ -15,6 +15,7 @@ function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
   };
 
   DataSourceTaskBase.prototype.stop = function () {
+    DataSourceSinkBase.prototype.stop.call(this);
     if (this.task) {
       this.task.destroy();
     }
