@@ -3,14 +3,18 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
 
   var lib = execlib.lib,
     q = lib.q,
-    taskRegistry = execlib.execSuite.taskRegistry;
+    taskRegistry = execlib.execSuite.taskRegistry,
+    cnt = 0;
+
 
   function AllexDataQuery (sink, options) {
     DataSourceTaskBase.call(this, sink, options);
     this.data = [];
+    this.cnt = cnt++;
   }
   lib.inherit(AllexDataQuery, DataSourceTaskBase);
   AllexDataQuery.prototype.destroy = function () {
+    this.cnt = null;
     this.data = null;
     DataSourceTaskBase.prototype.destroy.call(this);
   };
@@ -27,7 +31,6 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
       continuous: true,
       filter : this.filter
     });
-    return q.resolve(true);
   };
 
   AllexDataQuery.prototype.fire = function () {

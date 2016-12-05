@@ -1223,14 +1223,18 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
 
   var lib = execlib.lib,
     q = lib.q,
-    taskRegistry = execlib.execSuite.taskRegistry;
+    taskRegistry = execlib.execSuite.taskRegistry,
+    cnt = 0;
+
 
   function AllexDataQuery (sink, options) {
     DataSourceTaskBase.call(this, sink, options);
     this.data = [];
+    this.cnt = cnt++;
   }
   lib.inherit(AllexDataQuery, DataSourceTaskBase);
   AllexDataQuery.prototype.destroy = function () {
+    this.cnt = null;
     this.data = null;
     DataSourceTaskBase.prototype.destroy.call(this);
   };
@@ -1247,7 +1251,6 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
       continuous: true,
       filter : this.filter
     });
-    return q.resolve(true);
   };
 
   AllexDataQuery.prototype.fire = function () {
@@ -1499,17 +1502,22 @@ function createDataSourceSinkBase (execlib, DataSourceBase) {
   'use strict';
 
   var lib = execlib.lib,
-    q = lib.q;
+    q = lib.q,
+    cnt = 0;
 
   function DataSourceSinkBase (sink, options){
     DataSourceBase.call(this, options);
+    this.cnt = cnt++;
     this.sink = sink;
     this._starting = null;
     this._should_stop = null;
+    this._sink_instance = null;
+    this._sink_destroyed_listener = null;
   }
   lib.inherit(DataSourceSinkBase, DataSourceBase);
 
   DataSourceSinkBase.prototype.destroy = function () {
+    this.stop();
     this.sink = null;
     this._should_stop = null;
     this._starting = null;
@@ -1529,12 +1537,22 @@ function createDataSourceSinkBase (execlib, DataSourceBase) {
 
   DataSourceSinkBase.prototype.stop = function () {
     this._starting = null;
+    if (this._sink_destroyed_listener) this._sink_destroyed_listener.destroy();
+    this._sink_destroyed_listener = null;
+    this._sink_instance = null;
   };
 
   DataSourceSinkBase.prototype.start = function () {
+
     this._should_stop = false;
     if (this._starting) return this._starting;
     if (!this.sink) return;
+
+    if (this._sink_instance) {
+      this._starting = this.onGotSink(this._sink_instance);
+      this._starting.done(this._starting.bind(this));
+      return this._starting;
+    }
 
     this._starting = this.sink.waitForSink().then(this.onGotSink.bind(this));
     this._starting.done (this._started.bind(this));
@@ -1542,20 +1560,32 @@ function createDataSourceSinkBase (execlib, DataSourceBase) {
   };
 
   DataSourceSinkBase.prototype._started = function () {
-    //console.log('go go go ... task started ...');
     this._starting = null;
   };
 
+  DataSourceSinkBase.prototype._onSinkDestroyed = function () {
+    this._sink_destroyed_listener.destroy();
+    this._sink_destroyed_listener = null;
+    this._sink_instance = null;
+
+    if (this._should_stop) return;
+    //go and search for sink again ...
+    this.start();
+  };
+
   DataSourceSinkBase.prototype.onGotSink = function (sink){
-    //if datasource was stopped while tasksink was obtained, make sure that task is not started 
     if (this._should_stop) return q.resolve(true);
     if (!sink.destroyed) return q.reject(false);
+
+    this._sink_instance = sink;
+    this._sink_destroyed_listener = sink.destroyed.attach(this._onSinkDestroyed.bind(this));
+
     return this._doGoWithSink(sink);
   };
 
   DataSourceSinkBase.prototype.setFilter = function (filter) {
-    DataSourceBase.prototype.setFilter.call(this, filter);
     this.stop();
+    DataSourceBase.prototype.setFilter.call(this, filter);
     if (!this._should_stop) this.start();
   };
 
@@ -1575,19 +1605,22 @@ function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
   function DataSourceTaskBase (tasksink, options){
     DataSourceSinkBase.call(this, tasksink, options);
     this.task = null;
+    this._destroyed_listener = null;
   }
   lib.inherit(DataSourceTaskBase, DataSourceSinkBase);
 
   DataSourceTaskBase.prototype.destroy = function () {
+    if (this._destroyed_listener) this._destroyed_listener.destroy();
+    this._destroyed_listener = null;
     DataSourceSinkBase.prototype.destroy.call(this);
   };
 
   DataSourceTaskBase.prototype.stop = function () {
-    DataSourceSinkBase.prototype.stop.call(this);
     if (this.task) {
       this.task.destroy();
     }
     this.task = null;
+    DataSourceSinkBase.prototype.stop.call(this);
   };
 
   DataSourceTaskBase.prototype._doGoWithSink = function (sink) {
@@ -1595,7 +1628,44 @@ function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
       console.warn ('No sink in _doGoWithSink');
       return;
     }
+    if (this.task) {
+      //console.log('we have already set the filter in task ...');
+      return q.reject (new Error('Already have a task'));
+    }
     this._doStartTask(sink);
+    this._destroyed_listener = this.task.destroyed.attach (this._restart.bind(this));
+    return q.resolve('ok');
+  };
+
+  DataSourceTaskBase.prototype._restart = function () {
+    ///to monitor sink up/down situations ...
+    if (this._destroyed_listener) this._destroyed_listener.destroy();
+    this._destroyed_listener = null;
+
+    this.task = null;
+    if (this._should_stop) return;
+    this.start();
+  };
+
+  DataSourceTaskBase.prototype.setFilter = function (filter) {
+    return this.task ? this._doSetFilterWithTask(filter) : this._doSetFilterWithoutTask(filter);
+  };
+
+
+  DataSourceTaskBase.prototype._doSetFilterWithTask = function (filter){
+    //console.log('will do set filter with task', filter);
+    var sink = this.task.sink;
+    if (this._destroyed_listener) this._destroyed_listener.destroy();
+    this.task.destroy();
+    this.task = null;
+
+    this.filter = filter;
+    this._doGoWithSink(sink);
+    sink = null;
+  };
+
+  DataSourceTaskBase.prototype._doSetFilterWithoutTask = function (filter) {
+    return DataSourceSinkBase.prototype.setFilter.call(this, filter);
   };
 
   return DataSourceTaskBase;
