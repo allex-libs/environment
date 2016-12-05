@@ -323,6 +323,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
       if (defer) {
         defer.reject(new lib.Error('NO_SESSION_ID'));
       }
+      this.set('state', 'loggedout');
       defer = null;
       return;
     }
