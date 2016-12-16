@@ -2,7 +2,7 @@
 ALLEX.execSuite.libRegistry.register('allex_environmentlib',require('./src/index')(ALLEX));
 ALLEX.WEB_COMPONENTS.allex_environmentlib = ALLEX.execSuite.libRegistry.get('allex_environmentlib');
 
-},{"./src/index":17}],2:[function(require,module,exports){
+},{"./src/index":18}],2:[function(require,module,exports){
 function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
   'use strict';
 
@@ -877,7 +877,7 @@ function createAllexCommandDataWaiter(execlib, JSData) {
 module.exports = createAllexCommandDataWaiter;
 
 },{}],6:[function(require,module,exports){
-function createAllexDataPlusDataSource (execlib, DataSourceBase) {
+function createAllexDataPlusDataSource (execlib, DataSourceBase, BusyLogic) {
   'use strict';
   var lib = execlib.lib,
     taskRegistry = execlib.execSuite.taskRegistry,
@@ -899,6 +899,7 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase) {
     }
 
     DataSourceBase.call(this, sinks.keys, options);
+    this._bl = new BusyLogic(this);
     this.keys_sink = sinks.keys;
     this.values_sink = sinks.values;
     this._should_stop = null;
@@ -920,6 +921,8 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase) {
 
   lib.inherit (AllexDataPlusData, DataSourceBase);
   AllexDataPlusData.prototype.destroy = function () {
+    this._bl.destroy();
+    this._bl = null;
     this.stop();
     this.key_vals = null;
     this.key_fields = null;
@@ -940,6 +943,7 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase) {
   AllexDataPlusData.prototype.setTarget = function (target){
     if (!this.keys_sink) console.warn ('No keys sink');
     if (!this.values_sink) console.warn ('No values sink');
+    this._bl.setTarget(target);
 
     DataSourceBase.prototype.setTarget.call(this, target);
     if (target) {
@@ -1097,7 +1101,12 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase) {
       if (lib.isUndef(index)) continue;
       this.data[index] = lib.extend (this.left_side_data[index], rsd);
     }
-    this.target.set('data', this.data.slice());
+    this._bl.emitData();
+    //this.target.set('data', this.data.slice());
+  };
+
+  AllexDataPlusData.prototype.copyData = function () {
+    return this.data.slice();
   };
 
   return AllexDataPlusData;
@@ -1106,7 +1115,7 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase) {
 module.exports = createAllexDataPlusDataSource;
 
 },{}],7:[function(require,module,exports){
-function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
+function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
   'use strict';
 
   var lib = execlib.lib,
@@ -1127,6 +1136,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
       throw new lib.Error('NO_PRIMARYKEY_IN_OPTIONS');
     }
     DataSourceTaskBase.call(this,sinks.data, options);
+    this._bl = new BusyLogic (this);
     this.leveldbsink = sinks.leveldb;
     this.pk = options.primarykey;
     this.valuename = options.valuename || 'value';
@@ -1138,6 +1148,8 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
   }
   lib.inherit(AllexDataPlusLevelDB, DataSourceTaskBase);
   AllexDataPlusLevelDB.prototype.destroy = function () {
+    this._bl.destroy();
+    this._bl = null;
     this._reconsume = null;
     if (this.map) {
       this.map.destroy();
@@ -1151,6 +1163,12 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     this.keyfilter = null;
     DataSourceTaskBase.prototype.destroy.call(this);
   };
+
+  AllexDataPlusLevelDB.prototype.setTarget = function (target) {
+    DataSourceTaskBase.prototype.setTarget.call(this, target);
+    this._bl.setTarget(target);
+  };
+
   AllexDataPlusLevelDB.prototype._doStartTask = function (tasksink) {
     if (!this.leveldbsink) {
       console.warn('No leveldbsink');
@@ -1181,13 +1199,13 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
   };
   AllexDataPlusLevelDB.prototype.fire = function () {
     this.map.traverse(this.valuer.bind(this));
-    this.target.set('data', this.data.slice());
+    this._bl.emitData();
   };
   AllexDataPlusLevelDB.prototype.onLevelDBData = function (uservaluearry) {
     var k = this.keyfilter(uservaluearry[0]), v = this.valuefilter(uservaluearry[1]);
     this.map.replace(k, v);
     this.valuer(v, k);
-    this.target.set('data', this.data.slice());
+    this._bl.emitData();
   };
   AllexDataPlusLevelDB.prototype.valuer = function (value, pk) {
     var data = this.data, dl = data.length, i, d, j, vn;
@@ -1213,13 +1231,17 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     }
   };
 
+  AllexDataPlusLevelDB.prototype.copyData = function () {
+    return this.data.slice();
+  };
+
   return AllexDataPlusLevelDB;
 }
 
 module.exports = createAllexDataPlusLevelDBDataSource;
 
 },{}],8:[function(require,module,exports){
-function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
+function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) {
   'use strict';
 
   var lib = execlib.lib,
@@ -1230,22 +1252,32 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
 
   function AllexDataQuery (sink, options) {
     DataSourceTaskBase.call(this, sink, options);
+    this._bl = new BusyLogic(this);
     this.data = [];
     this.cnt = cnt++;
   }
   lib.inherit(AllexDataQuery, DataSourceTaskBase);
   AllexDataQuery.prototype.destroy = function () {
+    this._bl.destroy();
+    this._bl = null;
     this.cnt = null;
     this.data = null;
     DataSourceTaskBase.prototype.destroy.call(this);
   };
 
+  AllexDataQuery.prototype.setTarget = function (target) {
+    this._bl.setTarget(target);
+    DataSourceTaskBase.prototype.setTarget.call(this, target);
+  };
+
   AllexDataQuery.prototype._doStartTask = function (sink) {
     var fire_er = this.fire.bind(this);
+    console.log('about to start task on ', this.cnt, Date.now(), this.target.get('busy'));
+    this._bl.block();
     this.task = taskRegistry.run('materializeQuery', {
       sink: sink,
       data: this.data,
-      onInitiated: fire_er,
+      onInitiated: this.onInitiated.bind(this),
       onNewRecord: fire_er,
       onDelete: fire_er,
       onUpdate: fire_er,
@@ -1255,8 +1287,16 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
   };
 
   AllexDataQuery.prototype.fire = function () {
-    console.log('allex data changed', this.data);
-    this.target.set('data', this.data.slice()); //horror, if there were a more elegant way...
+    this._bl.emitData();
+  };
+
+  AllexDataQuery.prototype.onInitiated = function () {
+    console.log('about to report initiated task on ', this.cnt, Date.now(), this.target.get('busy'));
+    this._bl.unblockAndFlush();
+  };
+
+  AllexDataQuery.prototype.copyData = function () {
+    return this.data.slice();
   };
 
   return AllexDataQuery;
@@ -1307,7 +1347,7 @@ function createAllexHash2ArrayDataSource (execlib, AllexState) {
 module.exports = createAllexHash2ArrayDataSource;
 
 },{}],10:[function(require,module,exports){
-function createAllexLevelDBDataSource(execlib, DataSourceSinkBase) {
+function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
   'use strict';
 
   var lib = execlib.lib,
@@ -1319,10 +1359,13 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase) {
   }
   function AllexLevelDB (sink, options) {
     DataSourceSinkBase.call(this,sink, options); //nisam bas najsigurniji ...
+    this._bl = new BusyLogic(this);
     this.data = {};
   }
   lib.inherit(AllexLevelDB, DataSourceSinkBase);
   AllexLevelDB.prototype.destroy = function () {
+    this._bl.destroy();
+    this._bl = null;
     this.data = null;
     DataSourceSinkBase.prototype.destroy.call(this);
   };
@@ -1337,7 +1380,16 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase) {
   AllexLevelDB.prototype.onLevelDBData = function (leveldata) {
     if (!leveldata) return;
     this.data[leveldata[0]] = leveldata[1];
-    this.target.set('data', lib.extend({}, this.data));
+    this._bl.emitData();
+  };
+
+  AllexLevelDB.prototype.setTarget = function (target) {
+    DataSourceSinkBase.prototype.prototype.setTarget.call(this, target);
+    this._bl.setTarget(target);
+  };
+
+  AllexLevelDB.prototype.copyData = function () {
+    return lib.extend({}, this.data);
   };
 
   return AllexLevelDB;
@@ -1424,18 +1476,96 @@ function createDataSourceBase (execlib) {
 module.exports = createDataSourceBase;
 
 },{}],13:[function(require,module,exports){
+function createBusyLogicCreator (execlib) {
+  'use strict';
+
+  var lib = execlib.lib,
+    q = lib.q;
+
+  function BusyLogic (datasource) {
+    this.target = null;
+    this.blocked = false;
+    this.datasource = datasource;
+    this._timer = null;
+  }
+
+  BusyLogic.prototype.destroy = function () {
+    this.blocked = false;
+    if (this._timer) {
+      lib.clearTimeout (this._timer);
+    }
+    this._timer = null;
+    this.target = null;
+    this.datasource = null;
+  };
+
+  BusyLogic.prototype.setTarget = function (target) {
+    if (this._timer) {
+      lib.clearTimeout(this._timer);
+    }
+    this.target = target;
+    if (this.target) this.emitData();
+  };
+
+  BusyLogic.prototype.emitData = function () {
+    if (this.blocked) return;
+    if (!this.target) throw new Error('No target and you want to emit data');
+    if (this._timer) {
+      lib.clearTimeout (this._timer);
+      this._timer = null;
+    }
+    //console.log('will emit busy true on', this.datasource.cnt, Date.now(), this.datasource.data.length);
+    this.target.set('busy', true);
+    this._timer = lib.runNext (this._doActualDataEmit.bind(this), 500);
+  };
+
+  BusyLogic.prototype._doActualDataEmit = function () {
+    this._timer = null;
+    if (this.blocked) return;
+    this.flush();
+  };
+
+  BusyLogic.prototype.flush = function () {
+    var ds = this.datasource.copyData();
+    this.target.set('data', ds);
+    //console.log('will emit busy false on', this.datasource.cnt, Date.now(), ds.length);
+    this.target.set('busy', false);
+  };
+
+  BusyLogic.prototype.block = function () {
+    //console.log('about to block datasource emit', this.datasource.cnt);
+    this.blocked = true;
+    this.target.set('busy', true);
+  };
+
+  BusyLogic.prototype.unblock = function () {
+    this.blocked = false;
+  };
+
+  BusyLogic.prototype.unblockAndFlush = function () {
+    this.unblock();
+    this.emitData();
+  };
+
+  return BusyLogic;
+}
+
+module.exports = createBusyLogicCreator;
+
+},{}],14:[function(require,module,exports){
 function createDataSourceRegistry (execlib) {
   'use strict';
-  var DataSourceBase = require('./basecreator')(execlib),
+  var BusyLogic = require('./busylogic')(execlib),
+    DataSourceBase = require('./basecreator')(execlib),
     DataSourceSinkBase = require('./sinkbasecreator')(execlib, DataSourceBase),
     DataSourceTaskBase = require('./taskbasecreator')(execlib, DataSourceSinkBase),
     AllexState = require('./allexstatecreator')(execlib, DataSourceBase),
     AllexHash2Array = require('./allexhash2arraycreator')(execlib, AllexState),
-    AllexDataQuery = require('./allexdataquerycreator')(execlib, DataSourceTaskBase),
-    AllexDataPlusLevelDB = require('./allexdataplusleveldbcreator')(execlib, DataSourceTaskBase),
-    AllexLevelDB = require('./allexleveldbcreator')(execlib, DataSourceSinkBase),
-    AllexDataPlusData = require('./allexdataplusdatacreator.js')(execlib, DataSourceBase),
-    JSData = require('./jsdatacreator')(execlib, DataSourceBase),
+    AllexDataQuery = require('./allexdataquerycreator')(execlib, DataSourceTaskBase, BusyLogic),
+    AllexDataPlusLevelDB = require('./allexdataplusleveldbcreator')(execlib, DataSourceTaskBase, BusyLogic),
+    AllexLevelDB = require('./allexleveldbcreator')(execlib, DataSourceSinkBase, BusyLogic),
+    AllexDataPlusData = require('./allexdataplusdatacreator.js')(execlib, DataSourceBase, BusyLogic),
+    JSData = require('./jsdatacreator')(execlib, DataSourceBase, BusyLogic),
     AllexCommandDataWaiter = require('./allexcommanddatawaitercreator')(execlib, JSData);
 
   return {
@@ -1452,45 +1582,50 @@ function createDataSourceRegistry (execlib) {
 
 module.exports = createDataSourceRegistry;
 
-},{"./allexcommanddatawaitercreator":5,"./allexdataplusdatacreator.js":6,"./allexdataplusleveldbcreator":7,"./allexdataquerycreator":8,"./allexhash2arraycreator":9,"./allexleveldbcreator":10,"./allexstatecreator":11,"./basecreator":12,"./jsdatacreator":14,"./sinkbasecreator":15,"./taskbasecreator":16}],14:[function(require,module,exports){
-function createJSDataDataSource(execlib, DataSourceBase) {
+},{"./allexcommanddatawaitercreator":5,"./allexdataplusdatacreator.js":6,"./allexdataplusleveldbcreator":7,"./allexdataquerycreator":8,"./allexhash2arraycreator":9,"./allexleveldbcreator":10,"./allexstatecreator":11,"./basecreator":12,"./busylogic":13,"./jsdatacreator":15,"./sinkbasecreator":16,"./taskbasecreator":17}],15:[function(require,module,exports){
+function createJSDataDataSource(execlib, DataSourceBase, BusyLogic) {
   'use strict';
 
   var lib = execlib.lib;
 
   function JSData (options) {
     DataSourceBase.call(this, options);
+    this._bl = new BusyLogic(this);
     this.data = options ? options.data : null;
   }
   lib.inherit (JSData, DataSourceBase);
   JSData.prototype.destroy = function () {
+    this._bl.destroy();
     this.data = null;
     DataSourceBase.prototype.destroy.call(this);
   };
 
   JSData.prototype.setTarget = function (target) {
     DataSourceBase.prototype.setTarget.call(this, target);
+    this._bl.setTarget(target);
     this.setData();
   };
 
   JSData.prototype.setData = function (data) {
-    //ovo ovde je prilicno nedosledno ...
     if (arguments.length) {
       this.data = data;
     }
     if (!this.target) {
       return;
     }
+    this._bl.emitData();
+  };
+
+  JSData.prototype.copyData = function () {
     if (lib.isArray(this.data)) {
-      this.target.set('data', this.data.slice());
-      return;
+      return this.data.slice();
     }
 
     if (this.data instanceof Object){
-      this.target.set('data', lib.extend({}, this.data));
-      return;
+      return lib.extend({}, this.data);
     }
-    this.target.set('data', this.data);
+
+    return this.data;
   };
 
   return JSData;
@@ -1498,7 +1633,7 @@ function createJSDataDataSource(execlib, DataSourceBase) {
 
 module.exports = createJSDataDataSource;
 
-},{}],15:[function(require,module,exports){
+},{}],16:[function(require,module,exports){
 function createDataSourceSinkBase (execlib, DataSourceBase) {
   'use strict';
 
@@ -1596,7 +1731,7 @@ function createDataSourceSinkBase (execlib, DataSourceBase) {
 module.exports = createDataSourceSinkBase;
 
 
-},{}],16:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
   'use strict';
 
@@ -1675,7 +1810,7 @@ function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
 module.exports = createDataSourceTaskBase;
 
 
-},{}],17:[function(require,module,exports){
+},{}],18:[function(require,module,exports){
 (function (global){
 function createLib (execlib) {
   return execlib.loadDependencies('client', ['allex:leveldb:lib'], createEnvironmentFactory.bind(null, execlib));
@@ -1715,7 +1850,7 @@ function createEnvironmentFactory (execlib, leveldblib) {
 module.exports = createLib;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./allexcreator":2,"./allexremotecreator":3,"./basecreator":4,"./datasources":13,"./userrepresentationcreator":18}],18:[function(require,module,exports){
+},{"./allexcreator":2,"./allexremotecreator":3,"./basecreator":4,"./datasources":14,"./userrepresentationcreator":19}],19:[function(require,module,exports){
 function createUserRepresentation(execlib) {
   'use strict';
   var lib = execlib.lib,

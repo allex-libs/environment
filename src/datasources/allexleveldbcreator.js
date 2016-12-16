@@ -1,4 +1,4 @@
-function createAllexLevelDBDataSource(execlib, DataSourceSinkBase) {
+function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
   'use strict';
 
   var lib = execlib.lib,
@@ -10,10 +10,13 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase) {
   }
   function AllexLevelDB (sink, options) {
     DataSourceSinkBase.call(this,sink, options); //nisam bas najsigurniji ...
+    this._bl = new BusyLogic(this);
     this.data = {};
   }
   lib.inherit(AllexLevelDB, DataSourceSinkBase);
   AllexLevelDB.prototype.destroy = function () {
+    this._bl.destroy();
+    this._bl = null;
     this.data = null;
     DataSourceSinkBase.prototype.destroy.call(this);
   };
@@ -28,7 +31,16 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase) {
   AllexLevelDB.prototype.onLevelDBData = function (leveldata) {
     if (!leveldata) return;
     this.data[leveldata[0]] = leveldata[1];
-    this.target.set('data', lib.extend({}, this.data));
+    this._bl.emitData();
+  };
+
+  AllexLevelDB.prototype.setTarget = function (target) {
+    DataSourceSinkBase.prototype.prototype.setTarget.call(this, target);
+    this._bl.setTarget(target);
+  };
+
+  AllexLevelDB.prototype.copyData = function () {
+    return lib.extend({}, this.data);
   };
 
   return AllexLevelDB;

@@ -1,4 +1,4 @@
-function createAllexDataPlusDataSource (execlib, DataSourceBase) {
+function createAllexDataPlusDataSource (execlib, DataSourceBase, BusyLogic) {
   'use strict';
   var lib = execlib.lib,
     taskRegistry = execlib.execSuite.taskRegistry,
@@ -20,6 +20,7 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase) {
     }
 
     DataSourceBase.call(this, sinks.keys, options);
+    this._bl = new BusyLogic(this);
     this.keys_sink = sinks.keys;
     this.values_sink = sinks.values;
     this._should_stop = null;
@@ -41,6 +42,8 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase) {
 
   lib.inherit (AllexDataPlusData, DataSourceBase);
   AllexDataPlusData.prototype.destroy = function () {
+    this._bl.destroy();
+    this._bl = null;
     this.stop();
     this.key_vals = null;
     this.key_fields = null;
@@ -61,6 +64,7 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase) {
   AllexDataPlusData.prototype.setTarget = function (target){
     if (!this.keys_sink) console.warn ('No keys sink');
     if (!this.values_sink) console.warn ('No values sink');
+    this._bl.setTarget(target);
 
     DataSourceBase.prototype.setTarget.call(this, target);
     if (target) {
@@ -218,7 +222,12 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase) {
       if (lib.isUndef(index)) continue;
       this.data[index] = lib.extend (this.left_side_data[index], rsd);
     }
-    this.target.set('data', this.data.slice());
+    this._bl.emitData();
+    //this.target.set('data', this.data.slice());
+  };
+
+  AllexDataPlusData.prototype.copyData = function () {
+    return this.data.slice();
   };
 
   return AllexDataPlusData;

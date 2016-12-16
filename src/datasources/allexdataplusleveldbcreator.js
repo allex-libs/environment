@@ -1,4 +1,4 @@
-function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
+function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
   'use strict';
 
   var lib = execlib.lib,
@@ -19,6 +19,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
       throw new lib.Error('NO_PRIMARYKEY_IN_OPTIONS');
     }
     DataSourceTaskBase.call(this,sinks.data, options);
+    this._bl = new BusyLogic (this);
     this.leveldbsink = sinks.leveldb;
     this.pk = options.primarykey;
     this.valuename = options.valuename || 'value';
@@ -30,6 +31,8 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
   }
   lib.inherit(AllexDataPlusLevelDB, DataSourceTaskBase);
   AllexDataPlusLevelDB.prototype.destroy = function () {
+    this._bl.destroy();
+    this._bl = null;
     this._reconsume = null;
     if (this.map) {
       this.map.destroy();
@@ -43,6 +46,12 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
     this.keyfilter = null;
     DataSourceTaskBase.prototype.destroy.call(this);
   };
+
+  AllexDataPlusLevelDB.prototype.setTarget = function (target) {
+    DataSourceTaskBase.prototype.setTarget.call(this, target);
+    this._bl.setTarget(target);
+  };
+
   AllexDataPlusLevelDB.prototype._doStartTask = function (tasksink) {
     if (!this.leveldbsink) {
       console.warn('No leveldbsink');
@@ -73,13 +82,13 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
   };
   AllexDataPlusLevelDB.prototype.fire = function () {
     this.map.traverse(this.valuer.bind(this));
-    this.target.set('data', this.data.slice());
+    this._bl.emitData();
   };
   AllexDataPlusLevelDB.prototype.onLevelDBData = function (uservaluearry) {
     var k = this.keyfilter(uservaluearry[0]), v = this.valuefilter(uservaluearry[1]);
     this.map.replace(k, v);
     this.valuer(v, k);
-    this.target.set('data', this.data.slice());
+    this._bl.emitData();
   };
   AllexDataPlusLevelDB.prototype.valuer = function (value, pk) {
     var data = this.data, dl = data.length, i, d, j, vn;
@@ -103,6 +112,10 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase) {
         return;
       }
     }
+  };
+
+  AllexDataPlusLevelDB.prototype.copyData = function () {
+    return this.data.slice();
   };
 
   return AllexDataPlusLevelDB;

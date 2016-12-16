@@ -1,4 +1,4 @@
-function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
+function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) {
   'use strict';
 
   var lib = execlib.lib,
@@ -9,22 +9,32 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
 
   function AllexDataQuery (sink, options) {
     DataSourceTaskBase.call(this, sink, options);
+    this._bl = new BusyLogic(this);
     this.data = [];
     this.cnt = cnt++;
   }
   lib.inherit(AllexDataQuery, DataSourceTaskBase);
   AllexDataQuery.prototype.destroy = function () {
+    this._bl.destroy();
+    this._bl = null;
     this.cnt = null;
     this.data = null;
     DataSourceTaskBase.prototype.destroy.call(this);
   };
 
+  AllexDataQuery.prototype.setTarget = function (target) {
+    this._bl.setTarget(target);
+    DataSourceTaskBase.prototype.setTarget.call(this, target);
+  };
+
   AllexDataQuery.prototype._doStartTask = function (sink) {
     var fire_er = this.fire.bind(this);
+    console.log('about to start task on ', this.cnt, Date.now(), this.target.get('busy'));
+    this._bl.block();
     this.task = taskRegistry.run('materializeQuery', {
       sink: sink,
       data: this.data,
-      onInitiated: fire_er,
+      onInitiated: this.onInitiated.bind(this),
       onNewRecord: fire_er,
       onDelete: fire_er,
       onUpdate: fire_er,
@@ -34,8 +44,16 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase) {
   };
 
   AllexDataQuery.prototype.fire = function () {
-    console.log('allex data changed', this.data);
-    this.target.set('data', this.data.slice()); //horror, if there were a more elegant way...
+    this._bl.emitData();
+  };
+
+  AllexDataQuery.prototype.onInitiated = function () {
+    console.log('about to report initiated task on ', this.cnt, Date.now(), this.target.get('busy'));
+    this._bl.unblockAndFlush();
+  };
+
+  AllexDataQuery.prototype.copyData = function () {
+    return this.data.slice();
   };
 
   return AllexDataQuery;
