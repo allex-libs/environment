@@ -1384,7 +1384,7 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
   };
 
   AllexLevelDB.prototype.setTarget = function (target) {
-    DataSourceSinkBase.prototype.prototype.setTarget.call(this, target);
+    DataSourceSinkBase.prototype.setTarget.call(this, target);
     this._bl.setTarget(target);
   };
 
