@@ -139,7 +139,8 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
   var lib = execlib.lib,
     q = lib.q,
     qlib = lib.qlib,
-    remoteStorageName = 'remoteenvironmentstorage';
+    remoteStorageName = 'remoteenvironmentstorage',
+    letMeInHeartBeat = lib.intervals.Second;
 
   function AllexRemoteCommand (representation, options) {
     this.representation = null;
@@ -425,7 +426,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
       onComplete: this.onLetMeInResponse.bind(this, this.pendingRequest, credentials, d),
       onError: this.onLetMeInRequestFail.bind(this, d)
     });
-    lib.runNext(this.retryLetMeInIfStalled.bind(this, this.pendingRequest, d), 10*lib.intervals.Second);
+    lib.runNext(this.retryLetMeInIfStalled.bind(this, this.pendingRequest, d), 10*letMeInHeartBeat);
     credentials = null;
     return d.promise;
   };
@@ -461,7 +462,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
         var response = JSON.parse(response),
           protocol = protocolSecurer('ws');
         if (response.error && response.error==='NO_TARGETS_YET') {
-          lib.runNext(this.checkForSessionId.bind(this, defer), lib.intervals.Second);
+          lib.runNext(this.checkForSessionId.bind(this, defer), letMeInHeartBeat);
           return;
         }
         if (!(response.ipaddress && response.port && response.session)) {
@@ -485,10 +486,22 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     defer = null;
   };
   AllexRemoteEnvironment.prototype.onLetMeInRequestFail = function (d, reason) {
+    var lastrun = Date.now() - this.pendingRequest;
+    this.set('error', reason);
+    if (lastrun >= letMeInHeartBeat) {
+      this.reRunCheckSession(d);
+    } else {
+      lib.runNext(this.reRunCheckSession.bind(this, d), letMeInHeartBeat-lastrun);
+    }
+  };
+  AllexRemoteEnvironment.prototype.reRunCheckSession = function (defer) {
+    if (Date.now() - this.pendingRequest < letMeInHeartBeat) {
+      defer.reject(new lib.Error('ANOTHER_PENDING_REQUEST_ALREADY_ACTIVE', 'Another pending request is already active'));
+      return;
+    }
     this.credentialsForLogin = null;
     this.pendingRequest = 0;
-    this.set('error', reason);
-    lib.runNext(this.checkForSessionId.bind(this, d), lib.intervals.Second);
+    this.checkForSessionId(defer);
   };
   AllexRemoteEnvironment.prototype._onSink = function (defer, sessionid, sink) {
     if (!sink) {
@@ -2031,7 +2044,7 @@ function createUserRepresentation(execlib) {
       consumer = new StateEventConsumers(this, path);
       this.secp.consumers.add(path, consumer);
       //secp allready attachedTo
-      if(this.secp.sink){
+      if(this.secp.sink && this.secp.sink.state){
         this.secp.sink.state.setSink(consumer.ads);
       }
     }
@@ -2228,6 +2241,7 @@ function createUserRepresentation(execlib) {
 
   function SinkRepresentation(eventhandlers){
     this.sink = null;
+    this.sinkDestroyedListener = null;
     this.state = new lib.ListenableMap();
     this.subsinks = {};
     this.stateEvents = new StateEventConsumerPack();
@@ -2250,6 +2264,7 @@ function createUserRepresentation(execlib) {
     //console.log('destroying state');
     this.state.destroy();
     this.state = null;
+    this.purgeSinkDestroyedListener();
     this.sink = null;
   };
   SinkRepresentation.prototype.waitForSink = function () {
@@ -2341,6 +2356,8 @@ function createUserRepresentation(execlib) {
       d.resolve(0);
     } else {
       this.sink = sink;
+      this.purgeSinkDestroyedListener();
+      this.sinkDestroyedListener = sink.destroyed.attach(this.onSinkDown.bind(this));
       subsinkinfoextras = [];
       //console.log('at the beginning', sink.localSinkNames, '+', sinkinfoextras);
       if (sinkinfoextras) {
@@ -2357,6 +2374,16 @@ function createUserRepresentation(execlib) {
     subsinkinfoextras = null;
     sink = null;
     return d.promise;
+  };
+  SinkRepresentation.prototype.onSinkDown = function () {
+    this.purgeSinkDestroyedListener();
+    this.stateEvents.sink = null;
+  };
+  SinkRepresentation.prototype.purgeSinkDestroyedListener = function () {
+    if (this.sinkDestroyedListener) {
+      this.sinkDestroyedListener.destroy();
+    }
+    this.sinkDestroyedListener = null;
   };
   SinkRepresentation.prototype.handleSinkInfo = function (defer, sink, subsinkinfoextras) {
     if (!sink) {

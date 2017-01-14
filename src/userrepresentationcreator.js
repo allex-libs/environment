@@ -178,7 +178,7 @@ function createUserRepresentation(execlib) {
       consumer = new StateEventConsumers(this, path);
       this.secp.consumers.add(path, consumer);
       //secp allready attachedTo
-      if(this.secp.sink){
+      if(this.secp.sink && this.secp.sink.state){
         this.secp.sink.state.setSink(consumer.ads);
       }
     }
@@ -375,6 +375,7 @@ function createUserRepresentation(execlib) {
 
   function SinkRepresentation(eventhandlers){
     this.sink = null;
+    this.sinkDestroyedListener = null;
     this.state = new lib.ListenableMap();
     this.subsinks = {};
     this.stateEvents = new StateEventConsumerPack();
@@ -397,6 +398,7 @@ function createUserRepresentation(execlib) {
     //console.log('destroying state');
     this.state.destroy();
     this.state = null;
+    this.purgeSinkDestroyedListener();
     this.sink = null;
   };
   SinkRepresentation.prototype.waitForSink = function () {
@@ -488,6 +490,8 @@ function createUserRepresentation(execlib) {
       d.resolve(0);
     } else {
       this.sink = sink;
+      this.purgeSinkDestroyedListener();
+      this.sinkDestroyedListener = sink.destroyed.attach(this.onSinkDown.bind(this));
       subsinkinfoextras = [];
       //console.log('at the beginning', sink.localSinkNames, '+', sinkinfoextras);
       if (sinkinfoextras) {
@@ -504,6 +508,16 @@ function createUserRepresentation(execlib) {
     subsinkinfoextras = null;
     sink = null;
     return d.promise;
+  };
+  SinkRepresentation.prototype.onSinkDown = function () {
+    this.purgeSinkDestroyedListener();
+    this.stateEvents.sink = null;
+  };
+  SinkRepresentation.prototype.purgeSinkDestroyedListener = function () {
+    if (this.sinkDestroyedListener) {
+      this.sinkDestroyedListener.destroy();
+    }
+    this.sinkDestroyedListener = null;
   };
   SinkRepresentation.prototype.handleSinkInfo = function (defer, sink, subsinkinfoextras) {
     if (!sink) {

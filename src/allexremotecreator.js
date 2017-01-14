@@ -11,7 +11,8 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
   var lib = execlib.lib,
     q = lib.q,
     qlib = lib.qlib,
-    remoteStorageName = 'remoteenvironmentstorage';
+    remoteStorageName = 'remoteenvironmentstorage',
+    letMeInHeartBeat = lib.intervals.Second;
 
   function AllexRemoteCommand (representation, options) {
     this.representation = null;
@@ -297,7 +298,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
       onComplete: this.onLetMeInResponse.bind(this, this.pendingRequest, credentials, d),
       onError: this.onLetMeInRequestFail.bind(this, d)
     });
-    lib.runNext(this.retryLetMeInIfStalled.bind(this, this.pendingRequest, d), 10*lib.intervals.Second);
+    lib.runNext(this.retryLetMeInIfStalled.bind(this, this.pendingRequest, d), 10*letMeInHeartBeat);
     credentials = null;
     return d.promise;
   };
@@ -333,7 +334,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
         var response = JSON.parse(response),
           protocol = protocolSecurer('ws');
         if (response.error && response.error==='NO_TARGETS_YET') {
-          lib.runNext(this.checkForSessionId.bind(this, defer), lib.intervals.Second);
+          lib.runNext(this.checkForSessionId.bind(this, defer), letMeInHeartBeat);
           return;
         }
         if (!(response.ipaddress && response.port && response.session)) {
@@ -357,10 +358,22 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     defer = null;
   };
   AllexRemoteEnvironment.prototype.onLetMeInRequestFail = function (d, reason) {
+    var lastrun = Date.now() - this.pendingRequest;
+    this.set('error', reason);
+    if (lastrun >= letMeInHeartBeat) {
+      this.reRunCheckSession(d);
+    } else {
+      lib.runNext(this.reRunCheckSession.bind(this, d), letMeInHeartBeat-lastrun);
+    }
+  };
+  AllexRemoteEnvironment.prototype.reRunCheckSession = function (defer) {
+    if (Date.now() - this.pendingRequest < letMeInHeartBeat) {
+      defer.reject(new lib.Error('ANOTHER_PENDING_REQUEST_ALREADY_ACTIVE', 'Another pending request is already active'));
+      return;
+    }
     this.credentialsForLogin = null;
     this.pendingRequest = 0;
-    this.set('error', reason);
-    lib.runNext(this.checkForSessionId.bind(this, d), lib.intervals.Second);
+    this.checkForSessionId(defer);
   };
   AllexRemoteEnvironment.prototype._onSink = function (defer, sessionid, sink) {
     if (!sink) {
