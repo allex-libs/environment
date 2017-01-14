@@ -363,7 +363,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     if (lastrun >= letMeInHeartBeat) {
       this.reRunCheckSession(d);
     } else {
-      lib.runNext(this.reRunCheckSession.bind(this, d), letMeInHeartBeat-lastrun);
+      lib.runNext(this.reRunCheckSession.bind(this, d), letMeInHeartBeat-lastrun+1); //1=>safety margin
     }
   };
   AllexRemoteEnvironment.prototype.reRunCheckSession = function (defer) {

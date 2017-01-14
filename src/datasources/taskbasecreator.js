@@ -35,7 +35,9 @@ function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
       return q.reject (new Error('Already have a task'));
     }
     this._doStartTask(sink);
-    this._destroyed_listener = this.task.destroyed.attach (this._restart.bind(this));
+    if (this.task) {
+      this._destroyed_listener = this.task.destroyed.attach (this._restart.bind(this));
+    }
     return q.resolve('ok');
   };
 
