@@ -75,12 +75,18 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
   */
 
   AllexEnvironment.prototype.sinkfinder = function (promises, sinks, sinkname, sinkreference) {
-    var d = q.defer();
+    var d = q.defer(), Err = lib.Error;
     this.findSink(sinkname).then(function (sink) {
-      sinks[sinkreference] = sink;
+      if (!sink) {
+        console.error('Sink for createMultiSinkDataSource referenced as', sinkreference, 'was not found');
+        d.reject(new Err('SINK_NOT_FOUND_FOR_MULTISINK_DATASOURCE', 'Sink for createMultiSinkDataSource referenced as '+sinkreference+' was not found'));
+      } else {
+        sinks[sinkreference] = sink;
+        d.resolve(true);
+      }
+      Err = null;
       sinks = null;
       sinkreference = null;
-      d.resolve(true);
       d = null;
     });
     //d.promise.done (console.log.bind(console, 'got sink', sinkname), console.log.bind(console, 'failed sink', sinkname));
@@ -736,12 +742,20 @@ function createEnvironmentBase (execlib, leveldblib) {
     }
     if (!this.dataSources.busy(desc.name)) {
       ret = this.dataSources.waitFor(desc.name);
+
       this.createDataSource(desc.type, desc.options).then(
-        this.onDataSourceCreated.bind(this, desc)
+        this.onDataSourceCreated.bind(this, desc),
+        this.onFailedToCreateDataSource.bind(this, desc)
       );
     }
     return ret || this.dataSources.waitFor(desc.name);
   };
+
+  EnvironmentBase.prototype.onFailedToCreateDataSource = function (desc) {
+    this.dataSources.register(desc.name, null);
+    return q(null);
+  };
+
   EnvironmentBase.prototype.onDataSourceCreated = function (desc, ds) {
     this.dataSources.register(desc.name, ds);
     return q(ds);

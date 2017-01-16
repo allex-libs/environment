@@ -121,12 +121,20 @@ function createEnvironmentBase (execlib, leveldblib) {
     }
     if (!this.dataSources.busy(desc.name)) {
       ret = this.dataSources.waitFor(desc.name);
+
       this.createDataSource(desc.type, desc.options).then(
-        this.onDataSourceCreated.bind(this, desc)
+        this.onDataSourceCreated.bind(this, desc),
+        this.onFailedToCreateDataSource.bind(this, desc)
       );
     }
     return ret || this.dataSources.waitFor(desc.name);
   };
+
+  EnvironmentBase.prototype.onFailedToCreateDataSource = function (desc) {
+    this.dataSources.register(desc.name, null);
+    return q(null);
+  };
+
   EnvironmentBase.prototype.onDataSourceCreated = function (desc, ds) {
     this.dataSources.register(desc.name, ds);
     return q(ds);
