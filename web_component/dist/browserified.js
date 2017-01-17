@@ -1220,7 +1220,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyL
     if (!this._reconsume) return q.resolve(true);
     this._reconsume = false;
     leveldbsink.consumeChannel('l', this.onLevelDBData.bind(this));
-    //accounts? zaista?
+    //accounts? zaista? samo to ... nista vise ? pogledaj allexleveldbcreator ....
     leveldbsink.sessionCall('hook', {scan: true, accounts: ['***']});
     return q.resolve(true);
   };
@@ -1299,7 +1299,7 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) 
 
   AllexDataQuery.prototype._doStartTask = function (sink) {
     var fire_er = this.fire.bind(this);
-    console.log('about to start task on ', this.cnt, Date.now(), this.target.get('busy'));
+    //console.log('about to start task on ', this.cnt, Date.now(), this.target.get('busy'));
     this._bl.block();
     this.task = taskRegistry.run('materializeQuery', {
       sink: sink,
@@ -1318,7 +1318,7 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) 
   };
 
   AllexDataQuery.prototype.onInitiated = function () {
-    console.log('about to report initiated task on ', this.cnt, Date.now(), this.target.get('busy'));
+    //console.log('about to report initiated task on ', this.cnt, Date.now(), this.target.get('busy'));
     this._bl.unblockAndFlush();
   };
 
@@ -1388,9 +1388,11 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
     DataSourceSinkBase.call(this,sink, options); //nisam bas najsigurniji ...
     this._bl = new BusyLogic(this);
     this.data = {};
+    this.hook_params = options.hook_params ? options.hook_params : {scan : true, accounts : ['***']};
   }
   lib.inherit(AllexLevelDB, DataSourceSinkBase);
   AllexLevelDB.prototype.destroy = function () {
+    this.hook_params = null;
     this._bl.destroy();
     this._bl = null;
     this.data = null;
@@ -1399,14 +1401,33 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
 
   AllexLevelDB.prototype._doGoWithSink = function (sink) {
     sink.consumeChannel('l', this.onLevelDBData.bind(this));
-    sink.sessionCall('hook', {scan: true, accounts: ['***']});
+    sink.sessionCall('hook', this.hook_params);
     return q.resolve(true);
   };
+
+  function fromarrayToData (key, data, val) {
+    if (key.length === 1) {
+      data[key[0]] = val;
+      return;
+    }
+
+    var k = key.shift();
+    if (!data.hasOwnProperty(k)) {
+      data[k] = {};
+    }
+
+    fromarrayToData (key, data[k], val);
+  }
 
   //TODO: fali filter, faili optimizacija na set data, radi se na slepo
   AllexLevelDB.prototype.onLevelDBData = function (leveldata) {
     if (!leveldata) return;
-    this.data[leveldata[0]] = leveldata[1];
+    var key = leveldata[0];
+    if (lib.isArray(key)){
+      fromarrayToData (key.slice(), this.data, leveldata[1]);
+    }else{
+      this.data[leveldata[0]] = leveldata[1];
+    }
     this._bl.emitData();
   };
 

@@ -29,7 +29,7 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) 
 
   AllexDataQuery.prototype._doStartTask = function (sink) {
     var fire_er = this.fire.bind(this);
-    console.log('about to start task on ', this.cnt, Date.now(), this.target.get('busy'));
+    //console.log('about to start task on ', this.cnt, Date.now(), this.target.get('busy'));
     this._bl.block();
     this.task = taskRegistry.run('materializeQuery', {
       sink: sink,
@@ -48,7 +48,7 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) 
   };
 
   AllexDataQuery.prototype.onInitiated = function () {
-    console.log('about to report initiated task on ', this.cnt, Date.now(), this.target.get('busy'));
+    //console.log('about to report initiated task on ', this.cnt, Date.now(), this.target.get('busy'));
     this._bl.unblockAndFlush();
   };
 

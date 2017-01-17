@@ -76,7 +76,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyL
     if (!this._reconsume) return q.resolve(true);
     this._reconsume = false;
     leveldbsink.consumeChannel('l', this.onLevelDBData.bind(this));
-    //accounts? zaista?
+    //accounts? zaista? samo to ... nista vise ? pogledaj allexleveldbcreator ....
     leveldbsink.sessionCall('hook', {scan: true, accounts: ['***']});
     return q.resolve(true);
   };
