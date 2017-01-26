@@ -58,6 +58,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyL
       return;
     }
     var fire_er = this.fire.bind(this);
+    var valuename = this.valuename;
     this.task = taskRegistry.run('materializeQuery', {
       sink: tasksink,
       data: this.data,

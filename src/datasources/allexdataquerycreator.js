@@ -44,6 +44,7 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) 
   };
 
   AllexDataQuery.prototype.fire = function () {
+    this._bl.unblock();
     this._bl.emitData();
   };
 

@@ -2,13 +2,17 @@ function createBusyLogicCreator (execlib) {
   'use strict';
 
   var lib = execlib.lib,
-    q = lib.q;
+    q = lib.q,
+    _initialperiod = 10;
 
   function BusyLogic (datasource) {
     this.target = null;
     this.blocked = false;
     this.datasource = datasource;
     this._timer = null;
+    this._period = _initialperiod;
+    this._newrecords = 0;
+    this._timeouttimestamp = 0;
   }
 
   BusyLogic.prototype.destroy = function () {
@@ -31,24 +35,39 @@ function createBusyLogicCreator (execlib) {
 
   BusyLogic.prototype.emitData = function () {
     if (this.blocked) return;
+    if (!this._period) return;
     if (!this.target) throw new Error('No target and you want to emit data');
-    if (this._timer) {
-      lib.clearTimeout (this._timer);
-      this._timer = null;
-    }
     //console.log('will emit busy true on', this.datasource.cnt, Date.now(), this.datasource.data.length);
-    this.target.set('busy', true);
-    this._timer = lib.runNext (this._doActualDataEmit.bind(this), 500);
+    //this.target.set('busy', false);
+    this._newrecords++;
+    if (!this._timer) {
+      this.createTimer();
+    }
+    //console.log(Date.now());
   };
 
-  BusyLogic.prototype._doActualDataEmit = function () {
+  BusyLogic.prototype.createTimer = function () {
+    this._period *= 2;
+    if (this._period > lib.intervals.Second) {
+      this.flush();
+    }
+    this._newrecords = 0;
+    this._timer = lib.runNext (this._timerProc.bind(this), this._period);
+  };
+
+  BusyLogic.prototype._timerProc = function () {
     this._timer = null;
     if (this.blocked) return;
-    this.flush();
+    if (!this._newrecords) {
+      this.flush();
+    } else {
+      this.createTimer();
+    }
   };
 
   BusyLogic.prototype.flush = function () {
     var ds = this.datasource.copyData();
+    this._period = _initialperiod;
     this.target.set('data', ds);
     //console.log('will emit busy false on', this.datasource.cnt, Date.now(), ds.length);
     this.target.set('busy', false);
