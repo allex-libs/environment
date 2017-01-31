@@ -1,4 +1,4 @@
-function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
+function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic, LevelDBProxy) {
   'use strict';
 
   var lib = execlib.lib,
@@ -22,6 +22,7 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
   }
   function AllexLevelDB (sink, options) {
     DataSourceSinkBase.call(this,sink, options); //nisam bas najsigurniji ...
+    this._sink_name = options.sink;
     this._bl = new BusyLogic(this);
     this.hook_params = options.hook_params ? options.hook_params : {scan : true, accounts : ['***']};
     this.hook_type = options.hook_type ? options.hook_type : 'data';
@@ -30,6 +31,7 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
   }
   lib.inherit(AllexLevelDB, DataSourceSinkBase);
   AllexLevelDB.prototype.destroy = function () {
+    this._sink_name = null;
     this.hook_params = null;
     this._bl.destroy();
     this._bl = null;
@@ -38,7 +40,7 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
   };
 
   AllexLevelDB.prototype._doGoWithSink = function (sink) {
-    sink.consumeChannel(VALID_HOOK_TYPES[this.hook_type].channel, this.onLevelDBData.bind(this));
+    LevelDBProxy.consumeChannel(this._sink_name, sink, VALID_HOOK_TYPES[this.hook_type].channel, this.onLevelDBData.bind(this));
     sink.sessionCall(VALID_HOOK_TYPES[this.hook_type].command, this.hook_params);
     return q.resolve(true);
   };

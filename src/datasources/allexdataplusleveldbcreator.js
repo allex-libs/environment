@@ -1,4 +1,4 @@
-function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
+function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic, LevelDBChannelProxy) {
   'use strict';
 
   var lib = execlib.lib,
@@ -28,9 +28,11 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyL
     this.data = [];
     this.map = new lib.Map();
     this._reconsume = true;
+    this._leveldb_sink_name = options.sinks.leveldb;
   }
   lib.inherit(AllexDataPlusLevelDB, DataSourceTaskBase);
   AllexDataPlusLevelDB.prototype.destroy = function () {
+    this._leveldb_sink_name = null;
     this._bl.destroy();
     this._bl = null;
     this._reconsume = null;
@@ -76,7 +78,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyL
   AllexDataPlusLevelDB.prototype.onLeveldbSink = function (leveldbsink) {
     if (!this._reconsume) return q.resolve(true);
     this._reconsume = false;
-    leveldbsink.consumeChannel('l', this.onLevelDBData.bind(this));
+    LevelDBChannelProxy.consumeChannel(this._leveldb_sink_name,leveldbsink,'l', this.onLevelDBData.bind(this));
     //accounts? zaista? samo to ... nista vise ? pogledaj allexleveldbcreator ....
     leveldbsink.sessionCall('hook', {scan: true, accounts: ['***']});
     return q.resolve(true);
