@@ -248,7 +248,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.userRepresentation =new UserRepresentation();
     return execlib.loadDependencies('client', [
       '.',
-      'allex:users'
+      'allex:hotel'
     ], qlib.executor(this.sendLetMeInRequest.bind(this, credentials, defer, entrypointmethod)));
   };
   AllexRemoteEnvironment.prototype.findSink = function (sinkname) {
