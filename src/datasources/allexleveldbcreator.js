@@ -55,8 +55,8 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
       filter: this._filter,
       scanInitially: true,
       onPut: this.onLevelDBData.bind(this),
-      onDel: this.onLevelDBData.bind(this),
-      onInit: console.log.bind(console, 'queryLevelDB init')
+      onDel: console.warn.bind(console, 'AllexLevelDB deletion!'),
+      onInit: lib.dummyFunc
     });
     return q.resolve(true);
   };

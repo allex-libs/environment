@@ -1,4 +1,4 @@
-function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic, LevelDBChannelProxy) {
+function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
   'use strict';
 
   var lib = execlib.lib,
@@ -25,6 +25,8 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyL
     this.valuename = options.valuename || 'value';
     this.keyfilter = options.keyfilter || passthru;
     this.valuefilter = options.valuefilter || passthru;
+    this.levelDBFilters = options.levelDBFilters || {};
+    this.queryMethodName = options.queryMethodName || 'query';
     this.data = [];
     this.map = new lib.Map();
     this._reconsume = true;
@@ -41,7 +43,9 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyL
     }
     this.map = null;
     this.data = null;
-    //this.valuename = null;
+    this.queryMethodName = null;
+    this.levelDBFilters = null;
+    this.valuename = null;
     this.pk = null;
     this.leveldbsink = null;
     this.valuefilter = null;
@@ -78,9 +82,15 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyL
   AllexDataPlusLevelDB.prototype.onLeveldbSink = function (leveldbsink) {
     if (!this._reconsume) return q.resolve(true);
     this._reconsume = false;
-    LevelDBChannelProxy.consumeChannel(this._leveldb_sink_name,leveldbsink,'l', this.onLevelDBData.bind(this));
-    //accounts? zaista? samo to ... nista vise ? pogledaj allexleveldbcreator ....
-    leveldbsink.sessionCall('hook', {scan: true, accounts: ['***']});
+    taskRegistry.run('queryLevelDB', {
+      sink: leveldbsink,
+      queryMethodName: this.queryMethodName,
+      filter: this.levelDBFilters,
+      scanInitially: true,
+      onPut: this.onLevelDBData.bind(this),
+      onDel: console.warn.bind(console, 'AllexDataPlusLevelDB deletion!'),
+      onInit: lib.dummyFunc
+    });
     return q.resolve(true);
   };
   AllexDataPlusLevelDB.prototype.fire = function () {
