@@ -375,11 +375,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     if (!this.credentialsForLogin) {
       return;
     }
-    this.set('state', 'pending');
-    if (this.userRepresentation) {
-      this.userRepresentation.destroy();
-    }
-    this.userRepresentation =new UserRepresentation();
+    this.recreateUserRepresentation();
     return execlib.loadDependencies('client', [
       '.',
       'allex:hotel'
@@ -465,8 +461,8 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
 
     if (response) {
       try {
-        var response = JSON.parse(response),
-          protocol = protocolSecurer('ws');
+        var response = JSON.parse(response);
+
         if (response.error && response.error==='NO_TARGETS_YET') {
           lib.runNext(this.checkForSessionId.bind(this, defer), letMeInHeartBeat);
           return;
@@ -475,13 +471,9 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
           this.giveUp(credentials, defer);
           return;
         }
-        execlib.execSuite.taskRegistry.run('acquireSink', {
-          connectionString: protocol+'://'+response.ipaddress+':'+response.port,
-          session: response.session,
-          onSink:this._onSink.bind(this, defer, response.session),
-          singleshot: true
-        });
-      } catch(e) {
+        this._acquireSinkOnHotel (response, defer);
+
+        } catch(e) {
         console.error('problem with', response);
         //console.error(e.stack);
         console.error(e);
@@ -491,6 +483,33 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     }
     defer = null;
   };
+
+  AllexRemoteEnvironment.prototype.recreateUserRepresentation = function () {
+    this.set('state', 'pending');
+    if (this.userRepresentation) {
+      this.userRepresentation.destroy();
+    }
+    this.userRepresentation = new UserRepresentation();
+  };
+
+  AllexRemoteEnvironment.prototype.acquireSinkOnHotel = function (params) {
+    var defer = q.defer();
+    this.recreateUserRepresentation();
+    this._acquireSinkOnHotel (params, defer);
+    return defer.promise;
+  };
+
+  AllexRemoteEnvironment.prototype._acquireSinkOnHotel = function (params, defer) {
+    var protocol = protocolSecurer('ws');
+
+    execlib.execSuite.taskRegistry.run('acquireSink', {
+      connectionString: protocol+'://'+params.ipaddress+':'+params.port,
+      session: params.session,
+      onSink:this._onSink.bind(this, defer, params.session),
+      singleshot: true
+    });
+  };
+
   AllexRemoteEnvironment.prototype.onLetMeInRequestFail = function (d, reason) {
     var lastrun = Date.now() - this.pendingRequest;
     this.set('error', reason);
@@ -565,7 +584,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.set('state', 'pending');
     this.purgeHotelSinkDestroyedListener();
     this.purgeApartmentSinkDestroyedListener();
-    this.sendLetMeOutRequest({session: this.sessionid});
+    this.sendLetMeOutRequest({session: this.sessionid}).done (this.set.bind(this, 'state', 'loggedout'));
   };
 
   AllexRemoteEnvironment.prototype.sendLetMeOutRequest = function (credentials, d) {
@@ -2240,129 +2259,6 @@ function createUserRepresentation(execlib) {
   DataPurger.prototype.runItem = function (delitem) {
     this._state.remove(delitem.p[0]);
     this.state.handleStreamItem(delitem);
-  };
-
-
-  function DataEventConsumer(eventconsumers, cb){
-    this.ecs = eventconsumers;
-    this.subscription = this.ecs.consumers.add(cb);
-  }
-  DataEventConsumer.prototype.destroy = function () {
-    if (this.subscription) {
-      this.ecs.consumers.removeOne(this.subscription);
-    }
-    this.subscription = null;
-    this.ecs = null;
-  };
-
-  function DataEventConsumers(){
-    this.consumers = new lib.SortedList();
-    this.listeners = null;
-    this.hookcollection = null;
-  }
-  DataEventConsumers.prototype.destroy = function () {
-    this.hookcollection = null;
-    this.consumers.destroy();
-    this.consumers = null;
-    this.detach();
-  };
-  DataEventConsumers.prototype.attachTo = function (hookcollection) {
-    this.detach();
-    this.hookcollection = hookcollection;
-    this.listeners = this.consumers.map(function(cons){
-      return hookcollection.attach(cons);
-    });
-    hookcollection = null;
-  };
-  DataEventConsumers.prototype.detach = function () { //detach is "detach self from hook given in attachTo
-    if(!this.listeners){
-      return;
-    }
-    this.hookcollection = null;
-    lib.containerDestroyAll(this.listeners);
-    this.listeners.destroy();
-    this.listeners = null;
-  };
-  DataEventConsumers.prototype.attach = function (cb) { //attach is "remember this cb for later attachTo"
-    if(this.hookcollection){
-      this.listeners.push(this.hookcollection.attach(cb));
-    }
-    return new DataEventConsumer(this,cb);
-  };
-  DataEventConsumers.prototype.fire = function () {
-    var args = arguments;
-    this.consumers.traverse(function (l) {
-      l.apply(null,args);
-    });
-    args = null;
-  };
-  DataEventConsumers.prototype.fire_er = function () {
-    return this.fire.bind(this);
-  };
-
-  function DataEventConsumerPack(){
-    this.onInitiated = new DataEventConsumers();
-    this.onRecordCreation = new DataEventConsumers();
-    this.onNewRecord = new DataEventConsumers();
-    this.onUpdate = new DataEventConsumers();
-    this.onRecordUpdate = new DataEventConsumers();
-    this.onDelete = new DataEventConsumers();
-    this.onRecordDeletion = new DataEventConsumers();
-  }
-  DataEventConsumerPack.prototype.destroy = function () {
-    this.onInitiated.destroy();
-    this.onInitiated = null;
-    this.onRecordCreation.destroy();
-    this.onRecordCreation = null;
-    this.onNewRecord.destroy();
-    this.onNewRecord = null;
-    this.onUpdate.destroy();
-    this.onUpdate = null;
-    this.onRecordUpdate.destroy();
-    this.onRecordUpdate = null;
-    this.onDelete.destroy();
-    this.onDelete = null;
-    this.onRecordDeletion.destroy();
-    this.onRecordDeletion = null;
-  };
-  DataEventConsumerPack.prototype.listenerPack = function () {
-    return {
-      onInitiated: this.onInitiated.fire_er(),
-      onRecordCreation: this.onRecordCreation.fire_er(),
-      onNewRecord: this.onNewRecord.fire_er(),
-      onUpdate: this.onUpdate.fire_er(),
-      onRecordUpdate: this.onRecordUpdate.fire_er(),
-      onDelete: this.onDelete.fire_er(),
-      onRecordDeletion: this.onRecordDeletion.fire_er()
-    };
-  };
-  DataEventConsumerPack.prototype.monitorForGui = function (cb) {
-    return new DataMonitorForGui(this, cb);
-  };
-
-  function DataMonitorForGui(dataeventconsumers, cb){
-    this.onInitiatedListener = dataeventconsumers.onInitiated.attach(cb);
-    this.onNewRecordListener = dataeventconsumers.onNewRecord.attach(cb);
-    this.onUpdateListener = dataeventconsumers.onUpdate.attach(cb);
-    this.onDeleteListener = dataeventconsumers.onDelete.attach(cb);
-  }
-  DataMonitorForGui.prototype.destroy = function () {
-    if (this.onInitiatedListener) {
-      this.onInitiatedListener.destroy();
-    }
-    this.onInitiatedListener = null;
-    if (this.onNewRecordListener) {
-      this.onNewRecordListener.destroy();
-    }
-    this.onNewRecordListener = null;
-    if (this.onUpdateListener) {
-      this.onUpdateListener.destroy();
-    }
-    this.onUpdateListener = null;
-    if (this.onDeleteListener) {
-      this.onDeleteListener.destroy();
-    }
-    this.onDeleteListener = null;
   };
 
   function SinkRepresentation(eventhandlers){

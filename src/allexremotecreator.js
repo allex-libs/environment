@@ -241,11 +241,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     if (!this.credentialsForLogin) {
       return;
     }
-    this.set('state', 'pending');
-    if (this.userRepresentation) {
-      this.userRepresentation.destroy();
-    }
-    this.userRepresentation =new UserRepresentation();
+    this.recreateUserRepresentation();
     return execlib.loadDependencies('client', [
       '.',
       'allex:hotel'
@@ -331,8 +327,8 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
 
     if (response) {
       try {
-        var response = JSON.parse(response),
-          protocol = protocolSecurer('ws');
+        var response = JSON.parse(response);
+
         if (response.error && response.error==='NO_TARGETS_YET') {
           lib.runNext(this.checkForSessionId.bind(this, defer), letMeInHeartBeat);
           return;
@@ -341,13 +337,9 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
           this.giveUp(credentials, defer);
           return;
         }
-        execlib.execSuite.taskRegistry.run('acquireSink', {
-          connectionString: protocol+'://'+response.ipaddress+':'+response.port,
-          session: response.session,
-          onSink:this._onSink.bind(this, defer, response.session),
-          singleshot: true
-        });
-      } catch(e) {
+        this._acquireSinkOnHotel (response, defer);
+
+        } catch(e) {
         console.error('problem with', response);
         //console.error(e.stack);
         console.error(e);
@@ -357,6 +349,33 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     }
     defer = null;
   };
+
+  AllexRemoteEnvironment.prototype.recreateUserRepresentation = function () {
+    this.set('state', 'pending');
+    if (this.userRepresentation) {
+      this.userRepresentation.destroy();
+    }
+    this.userRepresentation = new UserRepresentation();
+  };
+
+  AllexRemoteEnvironment.prototype.acquireSinkOnHotel = function (params) {
+    var defer = q.defer();
+    this.recreateUserRepresentation();
+    this._acquireSinkOnHotel (params, defer);
+    return defer.promise;
+  };
+
+  AllexRemoteEnvironment.prototype._acquireSinkOnHotel = function (params, defer) {
+    var protocol = protocolSecurer('ws');
+
+    execlib.execSuite.taskRegistry.run('acquireSink', {
+      connectionString: protocol+'://'+params.ipaddress+':'+params.port,
+      session: params.session,
+      onSink:this._onSink.bind(this, defer, params.session),
+      singleshot: true
+    });
+  };
+
   AllexRemoteEnvironment.prototype.onLetMeInRequestFail = function (d, reason) {
     var lastrun = Date.now() - this.pendingRequest;
     this.set('error', reason);
@@ -431,7 +450,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.set('state', 'pending');
     this.purgeHotelSinkDestroyedListener();
     this.purgeApartmentSinkDestroyedListener();
-    this.sendLetMeOutRequest({session: this.sessionid});
+    this.sendLetMeOutRequest({session: this.sessionid}).done (this.set.bind(this, 'state', 'loggedout'));
   };
 
   AllexRemoteEnvironment.prototype.sendLetMeOutRequest = function (credentials, d) {
