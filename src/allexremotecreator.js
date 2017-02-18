@@ -134,6 +134,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.hotelSinkDestroyedListener = null;
     this.apartmentSinkDestroyedListener = null;
     this.pendingRequest = 0;
+    this.pendingRequests = new lib.Map();
     this.credentialsForLogin = null;
     this.sessionid = null;
     this.checkForSessionId();
@@ -144,6 +145,10 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.purgeHotelSinkDestroyedListener();
     this.purgeApartmentSinkDestroyedListener();
     this.credentialsForLogin = null;
+    if (this.pendingRequests) {
+      this.pendingRequests.destroy();
+    }
+    this.pendingRequests = null;
     this.pendingRequest = null;
     if (this.userRepresentation) {
       this.userRepresentation.destroy();
@@ -283,6 +288,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     }
     this.pendingRequest = Date.now();
     d = d || q.defer();
+    this.pendingRequests.add(this.pendingRequest, true);
     lib.request(protocolSecurer('http')+'://'+this.address+':'+this.port+'/'+ (entrypointmethod || 'letMeIn'), {
       /*
       parameters: {
@@ -292,7 +298,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
       */
       parameters: credentials,
       onComplete: this.onLetMeInResponse.bind(this, this.pendingRequest, credentials, d),
-      onError: this.onLetMeInRequestFail.bind(this, d)
+      onError: this.onLetMeInRequestFail.bind(this, this.pendingRequest, d)
     });
     lib.runNext(this.retryLetMeInIfStalled.bind(this, this.pendingRequest, d), 10*letMeInHeartBeat);
     credentials = null;
@@ -300,6 +306,12 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
   };
   AllexRemoteEnvironment.prototype.retryLetMeInIfStalled = function (pr, d) {
     var cfl;
+    if (!this.pendingRequests) {
+      return;
+    }
+    if (this.pendingRequests.count > 2) {
+      return;
+    }
     if (this.pendingRequest === pr) {
       cfl = this.credentialsForLogin;
       this.credentialsForLogin = null;
@@ -312,6 +324,10 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     }
   };
   AllexRemoteEnvironment.prototype.onLetMeInResponse = function (pr, credentials, defer, response) {
+    if (!this.pendingRequests) {
+      return;
+    }
+    this.pendingRequests.remove(pr);
     if (this.pendingRequest !== pr) {
       return;
     }
@@ -376,8 +392,13 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     });
   };
 
-  AllexRemoteEnvironment.prototype.onLetMeInRequestFail = function (d, reason) {
-    var lastrun = Date.now() - this.pendingRequest;
+  AllexRemoteEnvironment.prototype.onLetMeInRequestFail = function (pendingrequest, d, reason) {
+    var lastrun;
+    if (!this.pendingRequests) {
+      return;
+    }
+    this.pendingRequests.remove(pendingrequest);
+    lastrun = Date.now() - this.pendingRequest;
     this.set('error', reason);
     if (lastrun >= letMeInHeartBeat) {
       this.reRunCheckSession(d);

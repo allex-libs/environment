@@ -268,6 +268,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.hotelSinkDestroyedListener = null;
     this.apartmentSinkDestroyedListener = null;
     this.pendingRequest = 0;
+    this.pendingRequests = new lib.Map();
     this.credentialsForLogin = null;
     this.sessionid = null;
     this.checkForSessionId();
@@ -278,6 +279,10 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.purgeHotelSinkDestroyedListener();
     this.purgeApartmentSinkDestroyedListener();
     this.credentialsForLogin = null;
+    if (this.pendingRequests) {
+      this.pendingRequests.destroy();
+    }
+    this.pendingRequests = null;
     this.pendingRequest = null;
     if (this.userRepresentation) {
       this.userRepresentation.destroy();
@@ -417,6 +422,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     }
     this.pendingRequest = Date.now();
     d = d || q.defer();
+    this.pendingRequests.add(this.pendingRequest, true);
     lib.request(protocolSecurer('http')+'://'+this.address+':'+this.port+'/'+ (entrypointmethod || 'letMeIn'), {
       /*
       parameters: {
@@ -426,7 +432,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
       */
       parameters: credentials,
       onComplete: this.onLetMeInResponse.bind(this, this.pendingRequest, credentials, d),
-      onError: this.onLetMeInRequestFail.bind(this, d)
+      onError: this.onLetMeInRequestFail.bind(this, this.pendingRequest, d)
     });
     lib.runNext(this.retryLetMeInIfStalled.bind(this, this.pendingRequest, d), 10*letMeInHeartBeat);
     credentials = null;
@@ -434,6 +440,12 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
   };
   AllexRemoteEnvironment.prototype.retryLetMeInIfStalled = function (pr, d) {
     var cfl;
+    if (!this.pendingRequests) {
+      return;
+    }
+    if (this.pendingRequests.count > 2) {
+      return;
+    }
     if (this.pendingRequest === pr) {
       cfl = this.credentialsForLogin;
       this.credentialsForLogin = null;
@@ -446,6 +458,10 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     }
   };
   AllexRemoteEnvironment.prototype.onLetMeInResponse = function (pr, credentials, defer, response) {
+    if (!this.pendingRequests) {
+      return;
+    }
+    this.pendingRequests.remove(pr);
     if (this.pendingRequest !== pr) {
       return;
     }
@@ -510,8 +526,13 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     });
   };
 
-  AllexRemoteEnvironment.prototype.onLetMeInRequestFail = function (d, reason) {
-    var lastrun = Date.now() - this.pendingRequest;
+  AllexRemoteEnvironment.prototype.onLetMeInRequestFail = function (pendingrequest, d, reason) {
+    var lastrun;
+    if (!this.pendingRequests) {
+      return;
+    }
+    this.pendingRequests.remove(pendingrequest);
+    lastrun = Date.now() - this.pendingRequest;
     this.set('error', reason);
     if (lastrun >= letMeInHeartBeat) {
       this.reRunCheckSession(d);
@@ -1413,7 +1434,7 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
   var lib = execlib.lib,
     taskRegistry = execlib.execSuite.taskRegistry,
     q = lib.q,
-    VALID_HOOK_TYPES = {
+    COMMANDS = {
       'data' : {
         init : lib.Map,
         command : 'query'
@@ -1428,16 +1449,18 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
     return item;
   }
   function AllexLevelDB (sink, options) {
+    if (options.hook_type) {
+      throw new Error('AllexLevelDB has moved to query instead of hook');
+    }
     DataSourceSinkBase.call(this,sink, options); //nisam bas najsigurniji ...
     var init;
     this._sink_name = options.sink;
     this._filter = options.filter || {};
     this._bl = new BusyLogic(this);
-    this.hook_params = options.hook_params ? options.hook_params : {scan : true, accounts : ['***']};
-    this.hook_type = options.hook_type ? options.hook_type : 'data';
-    if (!(this.hook_type in VALID_HOOK_TYPES)) throw new Error ('Invalid hook type : '+options.hook_type);
+    this.command_type = options.command_type ? options.command_type : 'data';
+    if (!(this.command_type in COMMANDS)) throw new Error ('Invalid hook type : '+options.command_type);
     this.data = null;
-    init = VALID_HOOK_TYPES[this.hook_type].init;
+    init = COMMANDS[this.command_type].init;
     if (lib.isFunction(init)) {
       this.data = new init;
     }
@@ -1449,18 +1472,17 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
   AllexLevelDB.prototype.destroy = function () {
     this._sink_name = null;
     this._filter = null;
-    this.hook_params = null;
     this._bl.destroy();
     this._bl = null;
+    this.command_type = null;
     this.data = null;
     DataSourceSinkBase.prototype.destroy.call(this);
   };
 
   AllexLevelDB.prototype._doGoWithSink = function (sink) {
-    //sink.sessionCall(VALID_HOOK_TYPES[this.hook_type].command, this.hook_params);
     taskRegistry.run('queryLevelDB', {
       sink: sink,
-      queryMethodName: VALID_HOOK_TYPES[this.hook_type].command,
+      queryMethodName: COMMANDS[this.command_type].command,
       filter: this._filter,
       scanInitially: true,
       onPut: this.onLevelDBData.bind(this),
@@ -1504,12 +1526,12 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
   AllexLevelDB.prototype.onLevelDBData = function (leveldata) {
     if (!leveldata) return;
 
-    if (this.hook_type === 'data') {
+    if (this.command_type === 'data') {
       this._processMap(leveldata);
       return;
     }
 
-    if (this.hook_type === 'log') {
+    if (this.command_type === 'log') {
       this._processArray (leveldata);
       return;
     }
@@ -1521,12 +1543,12 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
   };
 
   AllexLevelDB.prototype.copyData = function () {
-    switch (this.hook_type) {
+    switch (this.command_type) {
       case 'log' : return this.data.slice();
       //case 'data': return lib.extend({}, this.data);
       case 'data': return this.data;
     }
-    throw new Error('Unknow hook type', this.hook_type);
+    throw new Error('Unknow hook type', this.command_type);
   };
 
   return AllexLevelDB;
