@@ -1,4 +1,4 @@
-function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
+function createAllexLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
   'use strict';
 
   var lib = execlib.lib,
@@ -22,44 +22,50 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
     if (options.hook_type) {
       throw new Error('AllexLevelDB has moved to query instead of hook');
     }
-    DataSourceSinkBase.call(this,sink, options); //nisam bas najsigurniji ...
-    var init;
+    DataSourceTaskBase.call(this,sink, options); //nisam bas najsigurniji ...
     this._sink_name = options.sink;
-    this._filter = options.filter || {};
+    this.filter = options.filter || {};
     this._bl = new BusyLogic(this);
     this.command_type = options.command_type ? options.command_type : 'data';
     if (!(this.command_type in COMMANDS)) throw new Error ('Invalid hook type : '+options.command_type);
     this.data = null;
-    init = COMMANDS[this.command_type].init;
+    this._resetData();
+  }
+  lib.inherit(AllexLevelDB, DataSourceTaskBase);
+  AllexLevelDB.prototype.destroy = function () {
+    this._sink_name = null;
+    this._bl.destroy();
+    this._bl = null;
+    this.command_type = null;
+    this.data = null;
+    DataSourceTaskBase.prototype.destroy.call(this);
+  };
+
+  AllexLevelDB.prototype._resetData = function () {
+    var init = COMMANDS[this.command_type].init;
     if (lib.isFunction(init)) {
       this.data = new init;
     }
     if (lib.isArray(init)) {
       this.data = init.slice();
     }
-  }
-  lib.inherit(AllexLevelDB, DataSourceSinkBase);
-  AllexLevelDB.prototype.destroy = function () {
-    this._sink_name = null;
-    this._filter = null;
-    this._bl.destroy();
-    this._bl = null;
-    this.command_type = null;
-    this.data = null;
-    DataSourceSinkBase.prototype.destroy.call(this);
   };
 
-  AllexLevelDB.prototype._doGoWithSink = function (sink) {
-    taskRegistry.run('queryLevelDB', {
+  AllexLevelDB.prototype.stop = function (){
+    DataSourceTaskBase.prototype.stop.call(this);
+    this._resetData();
+  };
+
+  AllexLevelDB.prototype._doStartTask = function (sink) {
+    this.task = taskRegistry.run('queryLevelDB', {
       sink: sink,
       queryMethodName: COMMANDS[this.command_type].command,
-      filter: this._filter,
+      filter: this.filter,
       scanInitially: true,
       onPut: this.onLevelDBData.bind(this),
       onDel: console.warn.bind(console, 'AllexLevelDB deletion!'),
       onInit: lib.dummyFunc
     });
-    return q.resolve(true);
   };
 
   function fromarrayToData (key, data, val) {
@@ -74,7 +80,6 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
     }
     fromarrayToData (key, data.get(k), val);
   }
-
 
   AllexLevelDB.prototype._processMap = function (leveldata) {
     var key = leveldata[0];
@@ -95,6 +100,10 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
   //TODO: fali filter, faili optimizacija na set data, radi se na slepo
   AllexLevelDB.prototype.onLevelDBData = function (leveldata) {
     if (!leveldata) return;
+    if (!this.target) {
+      console.log('stizu podaci iako nemam target ...', leveldata);
+      return;
+    }
 
     if (this.command_type === 'data') {
       this._processMap(leveldata);
@@ -108,7 +117,7 @@ function createAllexLevelDBDataSource(execlib, DataSourceSinkBase, BusyLogic) {
   };
 
   AllexLevelDB.prototype.setTarget = function (target) {
-    DataSourceSinkBase.prototype.setTarget.call(this, target);
+    DataSourceTaskBase.prototype.setTarget.call(this, target);
     this._bl.setTarget(target);
   };
 

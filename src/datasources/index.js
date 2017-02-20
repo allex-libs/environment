@@ -8,7 +8,7 @@ function createDataSourceRegistry (execlib) {
     AllexHash2Array = require('./allexhash2arraycreator')(execlib, AllexState),
     AllexDataQuery = require('./allexdataquerycreator')(execlib, DataSourceTaskBase, BusyLogic),
     AllexDataPlusLevelDB = require('./allexdataplusleveldbcreator')(execlib, DataSourceTaskBase, BusyLogic),
-    AllexLevelDB = require('./allexleveldbcreator')(execlib, DataSourceSinkBase, BusyLogic),
+    AllexLevelDB = require('./allexleveldbcreator')(execlib, DataSourceTaskBase, BusyLogic),
     AllexDataPlusData = require('./allexdataplusdatacreator.js')(execlib, DataSourceBase, BusyLogic),
     JSData = require('./jsdatacreator')(execlib, DataSourceBase, BusyLogic),
     AllexCommandDataWaiter = require('./allexcommanddatawaitercreator')(execlib, JSData);

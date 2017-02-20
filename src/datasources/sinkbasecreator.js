@@ -43,14 +43,13 @@ function createDataSourceSinkBase (execlib, DataSourceBase) {
   };
 
   DataSourceSinkBase.prototype.start = function () {
-
     this._should_stop = false;
     if (this._starting) return this._starting;
     if (!this.sink) return;
 
     if (this._sink_instance) {
       this._starting = this.onGotSink(this._sink_instance);
-      this._starting.done(this._starting.bind(this));
+      this._starting.done(this._started.bind(this));
       return this._starting;
     }
 
@@ -64,7 +63,9 @@ function createDataSourceSinkBase (execlib, DataSourceBase) {
   };
 
   DataSourceSinkBase.prototype._onSinkDestroyed = function () {
-    this._sink_destroyed_listener.destroy();
+    if (this._sink_destroyed_listener) {
+      this._sink_destroyed_listener.destroy();
+    }
     this._sink_destroyed_listener = null;
     this._sink_instance = null;
 

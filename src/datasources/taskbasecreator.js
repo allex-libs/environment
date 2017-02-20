@@ -52,6 +52,10 @@ function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
   };
 
   DataSourceTaskBase.prototype.setFilter = function (filter) {
+    if (!filter) {
+      this.stop();
+      return;
+    }
     return this.task ? this._doSetFilterWithTask(filter) : this._doSetFilterWithoutTask(filter);
   };
 
