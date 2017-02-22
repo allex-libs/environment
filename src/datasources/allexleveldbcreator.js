@@ -25,8 +25,8 @@ function createAllexLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
     DataSourceTaskBase.call(this,sink, options); //nisam bas najsigurniji ...
     this._sink_name = options.sink;
     this.filter = options.filter || {};
-    this._bl = new BusyLogic(this);
     this.command_type = options.command_type ? options.command_type : 'data';
+    this._bl = new BusyLogic(this, this.command_type === 'data');
     if (!(this.command_type in COMMANDS)) throw new Error ('Invalid hook type : '+options.command_type);
     this.data = null;
     this._resetData();

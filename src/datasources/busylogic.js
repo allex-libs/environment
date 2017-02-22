@@ -5,7 +5,7 @@ function createBusyLogicCreator (execlib) {
     q = lib.q,
     _initialperiod = 10;
 
-  function BusyLogic (datasource) {
+  function BusyLogic (datasource, trigger_changed_instead_set) {
     this.target = null;
     this.blocked = false;
     this.datasource = datasource;
@@ -13,9 +13,11 @@ function createBusyLogicCreator (execlib) {
     this._period = _initialperiod;
     this._newrecords = 0;
     this._timeouttimestamp = 0;
+    this._trigger_changed_instead_set = trigger_changed_instead_set;
   }
 
   BusyLogic.prototype.destroy = function () {
+    this._trigger_changed_instead_set = null;
     this.blocked = false;
     if (this._timer) {
       lib.clearTimeout (this._timer);
@@ -68,7 +70,11 @@ function createBusyLogicCreator (execlib) {
   BusyLogic.prototype.flush = function () {
     var ds = this.datasource.copyData();
     this._period = _initialperiod;
-    this.target.set('data', ds);
+    if (!this._trigger_changed_instead_set || this.target.get('data') !== ds){
+      this.target.set('data', ds);
+    }else{
+      this.target.changed.fire ('data', ds);
+    }
     //console.log('will emit busy false on', this.datasource.cnt, Date.now(), ds.length);
     this.target.set('busy', false);
   };
