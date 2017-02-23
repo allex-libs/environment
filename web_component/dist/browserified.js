@@ -1043,7 +1043,9 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase, BusyLogic) {
       this.values_task.destroy();
     }
     this.values_task = null;
-    this.key_indices_map.destroy();
+    if (this.key_indices_map) {
+      this.key_indices_map.destroy();
+    }
     this.key_indices_map = null;
   };
 
