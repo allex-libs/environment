@@ -345,9 +345,12 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
       try {
         var response = JSON.parse(response);
 
-        if (response.error && response.error==='NO_TARGETS_YET') {
-          lib.runNext(this.checkForSessionId.bind(this, defer), letMeInHeartBeat);
-          return;
+        if (response.error) {
+          console.log('response.error', response.error);
+          if (response.error==='NO_TARGETS_YET' || response.error==='NO_DB_YET') {
+            lib.runNext(this.checkForSessionId.bind(this, defer), letMeInHeartBeat);
+            return;
+          }
         }
         if (!(response.ipaddress && response.port && response.session)) {
           this.giveUp(credentials, defer);
