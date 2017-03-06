@@ -320,7 +320,11 @@ function createUserRepresentation(execlib) {
     return null;
   };
   function setter(map, cb, cbname) {
-    var mapval = map.get(cbname);
+    var mapval;
+    if (!map) {
+      return;
+    }
+    mapval = map.get(cbname);
     if(lib.defined(mapval)){
       cb(mapval);
     }
@@ -332,6 +336,9 @@ function createUserRepresentation(execlib) {
       statepath2: [cb2, cb3]
     }
     */
+    if (!this.state) {
+      return;
+    }
     lib.traverseShallow(listenerhash, setter.bind(null, this.state));
     return this.stateEvents.addConsumers(listenerhash);
   };
