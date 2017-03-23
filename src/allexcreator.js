@@ -73,7 +73,7 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
     var d = q.defer(), Err = lib.Error;
     this.findSink(sinkname).then(function (sink) {
       if (!sink) {
-        console.error('Sink for createMultiSinkDataSource referenced as', sinkreference, 'was not found');
+        console.error('Sink for createMultiSinkDataSource referenced as', sinkreference,'and name', sinkname, 'was not found');
         d.reject(new Err('SINK_NOT_FOUND_FOR_MULTISINK_DATASOURCE', 'Sink for createMultiSinkDataSource referenced as '+sinkreference+' was not found'));
       } else {
         sinks[sinkreference] = sink;

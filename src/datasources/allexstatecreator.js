@@ -6,7 +6,9 @@ function createAllexStateDataSource (execlib, DataSourceBase) {
   function AllexState (sink, options) {
     DataSourceBase.call(this, options);
     if (!sink) {
-      throw new lib.Error('NO_SINK');
+      //throw new lib.Error('NO_SINK');
+      console.error ('Sink for state was not found. Sink: ', options.sink, 'path:', options.path);
+      return;
     }
     if (!(options && options.path)) {
       throw new lib.Error('NO_STATE_NAME');
@@ -26,6 +28,7 @@ function createAllexStateDataSource (execlib, DataSourceBase) {
     DataSourceBase.prototype.destroy.call(this);
   };
   AllexState.prototype.setTarget = function (target) {
+    if (!this.sink) return;
     DataSourceBase.prototype.setTarget.call(this, target);
     var h = {};
     h[this.name] = this.onStateData.bind(this);
