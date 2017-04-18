@@ -190,6 +190,55 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     AllexRemoteCommand.prototype.destroy.call(this);
   };
 
+  function AllexAggregateDataCommand (representation, options) {
+    AllexRemoteDataCommand.call(this, representation, options);
+    this._current = null;
+  }
+  lib.inherit (AllexAggregateDataCommand, AllexRemoteDataCommand);
+  AllexAggregateDataCommand.prototype.destroy = function () {
+    this._current = null;
+    AllexRemoteDataCommand.prototype.destroy.call(this);
+  };
+  
+  AllexAggregateDataCommand.prototype.onSink = function (args, sink) {
+    var promise = AllexRemoteDataCommand.prototype.onSink.call(this, args, sink);
+    promise.done (null, null, this._onProgress.bind(this));
+    return promise;
+  };
+
+  AllexAggregateDataCommand.prototype._onProgress = function (data) {
+    switch (data[0]) {
+      case 'rb' : {
+        this._processBegin(data[1]);
+        break;
+      }
+      case 'r1' : {
+        this._processRecord(data[1], data[2]);
+        break;
+      }
+      case 're' : {
+        this._processEnd (data[1]);
+      }
+    }
+  };
+
+  AllexAggregateDataCommand.prototype._processBegin = function (session) {
+    if (this._current) return;
+    this._current = session;
+  };
+
+  AllexAggregateDataCommand.prototype._processRecord = function (session, record) {
+    if (this._current !== session) return;
+    var data = this.waiter.data.slice();
+    data.push (record);
+    this.waiter.setData(data);
+  };
+
+  AllexAggregateDataCommand.prototype._processEnd = function (session) {
+    if (this._current !== session) return;
+    this._current = null;
+  };
+
   function AllexLevelDBStreamerCommand (representation, options) {
     AllexRemoteDataCommand.call(this, representation, options);
     this.primarykey = options.primarykey;
@@ -404,6 +453,9 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
       throw new lib.JSONizingError ('NO_NAME_IN_OPTIONS', options, 'No name:');
     }
     switch (options.type) {
+      case 'aggregation' : 
+        ctor = AllexAggregateDataCommand;
+        break;
       case 'leveldbstreamer':
         ctor = AllexLevelDBStreamerCommand;
         break;
