@@ -91,6 +91,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
   AllexAggregateDataCommand.prototype._processBegin = function (session) {
     if (this._current) return;
     this._current = session;
+    this.waiter.setData([]);
   };
 
   AllexAggregateDataCommand.prototype._processRecord = function (session, record) {
