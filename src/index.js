@@ -1,12 +1,11 @@
 function createLib (execlib) {
-  return execlib.loadDependencies('client', ['allex:leveldb:lib'], createEnvironmentFactory.bind(null, execlib));
+  return execlib.loadDependencies('client', ['allex:leveldb:lib', 'allex:userrepresentation:lib'], createEnvironmentFactory.bind(null, execlib));
 }
 
-function createEnvironmentFactory (execlib, leveldblib) {
+function createEnvironmentFactory (execlib, leveldblib, UserRepresentation) {
   'use strict';
   var dataSourceRegistry = require('./datasources')(execlib),
     EnvironmentBase = require('./basecreator')(execlib, leveldblib),
-    UserRepresentation = require('./userrepresentationcreator')(execlib),
     AllexEnvironment = require('./allexcreator')(execlib, dataSourceRegistry, EnvironmentBase),
     AllexRemoteEnvironment = require('./allexremotecreator')(execlib, dataSourceRegistry, AllexEnvironment, UserRepresentation);
 
