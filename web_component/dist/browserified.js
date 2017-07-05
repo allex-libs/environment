@@ -321,6 +321,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.pendingRequests = new lib.Map();
     this.credentialsForLogin = null;
     this.sessionid = null;
+    this.secondphasesessionid = null;
     this.checkForSessionId();
     this.createStorage(remoteStorageName);
   }
@@ -328,6 +329,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
   AllexRemoteEnvironment.prototype.destroy = function () {
     this.purgeHotelSinkDestroyedListener();
     this.purgeApartmentSinkDestroyedListener();
+    this.secondphasesessionid = null;
     this.credentialsForLogin = null;
     if (this.pendingRequests) {
       this.pendingRequests.destroy();
@@ -539,6 +541,15 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
             return;
           }
         }
+        if (response.secondphase) {
+          this.pendingRequest = 0;
+          this.credentialsForLogin = null;
+          this.secondphasesessionid = response.secondphase;
+          this.delFromStorage(remoteStorageName, 'sessionid').then (
+            defer.resolve.bind(defer, this.set('state', 'secondphase')) //yes, 'state' is set immediately
+          );
+          return;
+        }
         if (!(response.ipaddress && response.port && response.session)) {
           this.giveUp(credentials, defer);
           return;
@@ -644,11 +655,13 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
   };
   AllexRemoteEnvironment.prototype.onSessionIdSaved = function () {
     this.credentialsForLogin = null;
+    this.secondphasesessionid = null;
     return q(this.set('state', 'established'));
   };
   AllexRemoteEnvironment.prototype.giveUp = function (credentials, defer) {
     this.pendingRequest = 0;
     this.credentialsForLogin = null;
+    this.secondphasesessionid = null;
     this.set('state', 'loggedout');
     this.delFromStorage(remoteStorageName, 'sessionid').then (
       defer.reject.bind(defer, new lib.JSONizingError('INVALID_LOGIN', credentials, 'Invalid'))
@@ -703,6 +716,27 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
   AllexRemoteEnvironment.prototype.onLetMeOutRequestFail = function (credentials, defer, reason) {
     this.set('error', reason);
     lib.runNext(this.sendLetMeOutRequest.bind(this, credentials, defer), lib.intervals.Second);
+  };
+  function nosecondphaser () {
+    return new lib.Error('NO_SECONDPHASE_IN_PROCESS', 'No second phase is in process, cannot send second phase token');
+  }
+  AllexRemoteEnvironment.prototype.sendSecondPhaseToken = function (token) {
+    var d, d2, ret;
+    if (!this.secondphasesessionid) {
+      d = q.defer();
+      this.giveUp({}, d);
+      return d.promise.then(null, nosecondphaser);
+    }
+    if (!token) {
+      //cancel 2 phase
+      d = q.defer();
+      d2 = q.defer();
+      ret = d2.promise;
+      this.giveUp({}, d);
+      d.promise.then(null, d2.resolve.bind(d2, true));
+      return ret;
+    }
+    return this.login({session: this.secondphasesessionid, secondphasetoken: token});
   };
   AllexRemoteEnvironment.prototype.type = 'allexremote';
 
