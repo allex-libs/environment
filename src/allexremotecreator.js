@@ -455,6 +455,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
       connectionString: protocol+'://'+params.ipaddress+':'+params.port,
       session: params.session,
       onSink:this._onSink.bind(this, defer, params.session),
+      onCannotConnect : defer.reject.bind(defer),
       singleshot: true
     });
   };
