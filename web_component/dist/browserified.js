@@ -435,7 +435,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.recreateUserRepresentation();
     return execlib.loadDependencies('client', [
       '.',
-      'allex:hotel'
+      'allex_hotelservice'
     ], qlib.executor(this.sendLetMeInRequest.bind(this, credentials, defer, entrypointmethod)));
   };
   AllexRemoteEnvironment.prototype.findSink = function (sinkname) {
@@ -2123,7 +2123,7 @@ module.exports = createDataSourceTaskBase;
 },{}],18:[function(require,module,exports){
 (function (global){
 function createLib (execlib) {
-  return execlib.loadDependencies('client', ['allex:leveldb:lib', 'allex:userrepresentation:lib'], createEnvironmentFactory.bind(null, execlib));
+  return execlib.loadDependencies('client', ['allex_leveldblib', 'allex_userrepresentationlib'], createEnvironmentFactory.bind(null, execlib));
 }
 
 function createEnvironmentFactory (execlib, leveldblib, UserRepresentation) {
