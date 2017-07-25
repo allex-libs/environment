@@ -319,7 +319,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.apartmentSinkDestroyedListener = null;
     this.pendingRequest = 0;
     this.pendingRequests = new lib.Map();
-    this.credentialsForLogin = null;
+    this.loginData = null;
     this.sessionid = null;
     this.secondphasesessionid = null;
     this.checkForSessionId();
@@ -330,7 +330,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.purgeHotelSinkDestroyedListener();
     this.purgeApartmentSinkDestroyedListener();
     this.secondphasesessionid = null;
-    this.credentialsForLogin = null;
+    this.loginData = null;
     if (this.pendingRequests) {
       this.pendingRequests.destroy();
     }
@@ -391,7 +391,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
       defer = null;
       return;
     }
-    this.login({session: sessionid.sessionid}, defer);
+    this.login({__sessions__id: sessionid.sessionid}, defer, 'letMeInWithSession');
     defer = null;
   };
   function callWebMethodResolver(defer,res){
@@ -425,17 +425,17 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     return this._callWebMethod('usernameExists', datahash);
   };
   AllexRemoteEnvironment.prototype.login = function (credentials, defer, entrypointmethod) {
-    if (this.credentialsForLogin) {
-      return;
+    if (this.loginData) {
+      return q;
     }
-    this.credentialsForLogin = credentials;
-    if (!this.credentialsForLogin) {
-      return;
+    if (!credentials) {
+      return q.reject(new lib.Error('CANNOT_LOGIN', 'Cannot login without credentials'));
     }
+    this.loginData = {credentials: credentials, method: entrypointmethod};
     this.recreateUserRepresentation();
     return execlib.loadDependencies('client', [
       '.',
-      'allex_hotelservice'
+      'allex:hotel'
     ], qlib.executor(this.sendLetMeInRequest.bind(this, credentials, defer, entrypointmethod)));
   };
   AllexRemoteEnvironment.prototype.findSink = function (sinkname) {
@@ -494,7 +494,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     return d.promise;
   };
   AllexRemoteEnvironment.prototype.retryLetMeInIfStalled = function (pr, d) {
-    var cfl;
+    var lid;
     if (!this.pendingRequests) {
       return;
     }
@@ -502,11 +502,11 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
       return;
     }
     if (this.pendingRequest === pr) {
-      cfl = this.credentialsForLogin;
-      this.credentialsForLogin = null;
+      lid = this.loginData;
+      this.loginData = null;
       this.pendingRequest = 0;
-      if (cfl) {
-        this.login(cfl, d);
+      if (lid) {
+        this.login(lid.credentials, d, lid.method);
       } else {
         this.checkForSessionId(d);
       }
@@ -543,7 +543,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
         }
         if (response.secondphase) {
           this.pendingRequest = 0;
-          this.credentialsForLogin = null;
+          this.loginData = null;
           this.secondphasesessionid = response.secondphase;
           this.delFromStorage(remoteStorageName, 'sessionid').then (
             defer.resolve.bind(defer, this.set('state', 'secondphase')) //yes, 'state' is set immediately
@@ -613,7 +613,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
       defer.reject(new lib.Error('ANOTHER_PENDING_REQUEST_ALREADY_ACTIVE', 'Another pending request is already active'));
       return;
     }
-    this.credentialsForLogin = null;
+    this.loginData = null;
     this.pendingRequest = 0;
     this.checkForSessionId(defer);
   };
@@ -655,13 +655,13 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     //return qlib.promise2defer(q(this.set('state', 'established')), defer);
   };
   AllexRemoteEnvironment.prototype.onSessionIdSaved = function () {
-    this.credentialsForLogin = null;
+    this.loginData = null;
     this.secondphasesessionid = null;
     return q(this.set('state', 'established'));
   };
   AllexRemoteEnvironment.prototype.giveUp = function (credentials, defer) {
     this.pendingRequest = 0;
-    this.credentialsForLogin = null;
+    this.loginData = null;
     this.secondphasesessionid = null;
     this.set('state', 'loggedout');
     this.delFromStorage(remoteStorageName, 'sessionid').then (
@@ -675,7 +675,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.set('state', 'pending');
     this.purgeHotelSinkDestroyedListener();
     this.purgeApartmentSinkDestroyedListener();
-    this.sendLetMeOutRequest({session: this.sessionid}).done (this.set.bind(this, 'state', 'loggedout'));
+    this.sendLetMeOutRequest({__sessions__id: this.sessionid}).done (this.set.bind(this, 'state', 'loggedout'));
   };
 
   AllexRemoteEnvironment.prototype.sendLetMeOutRequest = function (credentials, d) {
@@ -737,7 +737,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
       d.promise.then(null, d2.resolve.bind(d2, true));
       return ret;
     }
-    return this.login({session: this.secondphasesessionid, secondphasetoken: token});
+    return this.login({__sessions__id: this.secondphasesessionid, secondphasetoken: token}, null, 'letMeInWithSession');
   };
   AllexRemoteEnvironment.prototype.type = 'allexremote';
 
