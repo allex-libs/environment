@@ -554,9 +554,10 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
           this.giveUp(credentials, defer);
           return;
         }
+        this.pendingRequest = Date.now(); //ack that we've got the initial response
         this._acquireSinkOnHotel (response, defer);
 
-        } catch(e) {
+      } catch(e) {
         console.error('problem with', response);
         //console.error(e.stack);
         console.error(e);
