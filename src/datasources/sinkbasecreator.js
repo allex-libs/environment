@@ -9,6 +9,7 @@ function createDataSourceSinkBase (execlib, DataSourceBase) {
     DataSourceBase.call(this, options);
     this.cnt = cnt++;
     this.sink = sink;
+    this.resetDataOnSinkLost = options.resetdataonsinklost;
     this._starting = null;
     this._should_stop = null;
     this._sink_instance = null;
@@ -18,6 +19,7 @@ function createDataSourceSinkBase (execlib, DataSourceBase) {
 
   DataSourceSinkBase.prototype.destroy = function () {
     this.stop();
+    this.resetDataOnSinkLost = null;
     this.sink = null;
     this._should_stop = null;
     this._starting = null;

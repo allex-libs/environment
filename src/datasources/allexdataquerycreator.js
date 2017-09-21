@@ -27,6 +27,14 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) 
     DataSourceTaskBase.prototype.setTarget.call(this, target);
   };
 
+  AllexDataQuery.prototype.start = function () {
+    if (this.resetDataOnSinkLost) {
+      this.data = [];
+      this.fire();
+    }
+    DataSourceTaskBase.prototype.start.call(this);
+  };
+
   AllexDataQuery.prototype._doStartTask = function (sink) {
     var fire_er = this.fire.bind(this);
     //console.log('about to start task on ', this.cnt, Date.now(), this.target.get('busy'));

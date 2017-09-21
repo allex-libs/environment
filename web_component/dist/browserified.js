@@ -1444,6 +1444,14 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) 
     DataSourceTaskBase.prototype.setTarget.call(this, target);
   };
 
+  AllexDataQuery.prototype.start = function () {
+    if (this.resetDataOnSinkLost) {
+      this.data = [];
+      this.fire();
+    }
+    DataSourceTaskBase.prototype.start.call(this);
+  };
+
   AllexDataQuery.prototype._doStartTask = function (sink) {
     var fire_er = this.fire.bind(this);
     //console.log('about to start task on ', this.cnt, Date.now(), this.target.get('busy'));
@@ -1678,6 +1686,7 @@ function createAllexStateDataSource (execlib, DataSourceBase) {
     }
     this.sink = sink;
     this.name = options.path;
+    this.removalValue = options.removalValue;
     this.monitor = null;
   }
   lib.inherit(AllexState, DataSourceBase);
@@ -1686,6 +1695,7 @@ function createAllexStateDataSource (execlib, DataSourceBase) {
       this.monitor.destroy();
     }
     this.monitor = null;
+    this.removalValue = null;
     this.name = null;
     this.sink = null;
     DataSourceBase.prototype.destroy.call(this);
@@ -1699,10 +1709,19 @@ function createAllexStateDataSource (execlib, DataSourceBase) {
   };
   AllexState.prototype.onStateData = function (data) {
     //console.log('got state data', data);
+    var und;
     if (!this.target) {
       return;
     }
-    this.target.set('data', data);
+    if (und === data) {
+      if (und !== this.removalValue) {
+        this.target.set('data', this.removalValue);
+      } else {
+        this.target.set('data', null);
+      }
+    } else {
+      this.target.set('data', data);
+    }
   };
 
   return AllexState;
@@ -1949,6 +1968,7 @@ function createDataSourceSinkBase (execlib, DataSourceBase) {
     DataSourceBase.call(this, options);
     this.cnt = cnt++;
     this.sink = sink;
+    this.resetDataOnSinkLost = options.resetdataonsinklost;
     this._starting = null;
     this._should_stop = null;
     this._sink_instance = null;
@@ -1958,6 +1978,7 @@ function createDataSourceSinkBase (execlib, DataSourceBase) {
 
   DataSourceSinkBase.prototype.destroy = function () {
     this.stop();
+    this.resetDataOnSinkLost = null;
     this.sink = null;
     this._should_stop = null;
     this._starting = null;
