@@ -1589,6 +1589,7 @@ function createAllexLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
   };
 
   AllexLevelDB.prototype._doStartTask = function (sink) {
+    console.log('queryLevelDB');
     this.task = taskRegistry.run('queryLevelDB', {
       sink: sink,
       queryMethodName: COMMANDS[this.command_type].command,
@@ -2078,8 +2079,11 @@ function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
   };
 
   DataSourceTaskBase.prototype.stop = function () {
+    var _ss = this._should_stop;
     if (this.task) {
+      this._should_stop = true;
       this.task.destroy();
+      this._should_stop = _ss;
     }
     this.task = null;
     DataSourceSinkBase.prototype.stop.call(this);
@@ -2114,6 +2118,9 @@ function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
   DataSourceTaskBase.prototype.setFilter = function (filter) {
     if (!filter) {
       this.stop();
+      if (this.target) {
+        this.target.set('data', null);
+      }
       return;
     }
     return this.task ? this._doSetFilterWithTask(filter) : this._doSetFilterWithoutTask(filter);
