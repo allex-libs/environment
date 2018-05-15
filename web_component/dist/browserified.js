@@ -1429,6 +1429,9 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) 
     this._bl = new BusyLogic(this);
     this.data = [];
     this.cnt = cnt++;
+    if (options.filter) {
+      this.filter = options.filter;
+    }
   }
   lib.inherit(AllexDataQuery, DataSourceTaskBase);
   AllexDataQuery.prototype.destroy = function () {
@@ -1589,7 +1592,6 @@ function createAllexLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
   };
 
   AllexLevelDB.prototype._doStartTask = function (sink) {
-    console.log('queryLevelDB');
     this.task = taskRegistry.run('queryLevelDB', {
       sink: sink,
       queryMethodName: COMMANDS[this.command_type].command,

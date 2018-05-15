@@ -12,6 +12,9 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) 
     this._bl = new BusyLogic(this);
     this.data = [];
     this.cnt = cnt++;
+    if (options.filter) {
+      this.filter = options.filter;
+    }
   }
   lib.inherit(AllexDataQuery, DataSourceTaskBase);
   AllexDataQuery.prototype.destroy = function () {
