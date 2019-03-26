@@ -9,6 +9,14 @@
       "browserified.js"
     ]
   },
+  "dependencies": {
+    "js": [
+      "node_modules/allex_browsercore/dist/browsercore.js",
+      "node_modules/allexns/ns.js",
+      "allex:leveldb:lib",
+      "allex:userrepresentation:lib"
+    ]
+  },
   "protoboard": {
     "role":"web_component",
     "js_doc_filters": "^(src)"
