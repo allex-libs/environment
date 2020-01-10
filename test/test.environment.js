@@ -1,17 +1,18 @@
-var expect = require('chai').expect,
-  execlib = require('allex'),
-  factory = require('../src/')(execlib),
-  desc = {
+lib.arryOperations = require('allex_arrayoperationslowlevellib')(
+  lib.extend,
+  lib.readPropertyFromDotDelimitedString,
+  lib.isFunction,
+  lib.Map,
+  lib.AllexJSONizingError);
+
+var desc = {
     type: 'allexremote',
     name: 'INDATA',
     options: {
       entrypoint: {
-        address: '192.168.1.111',
-        port: 8008,
-        identity: {
-          'username': 'indata',
-          'password': '123'
-        } 
+        //address: '192.168.1.111',
+        address: 'fix.grodat.com',
+        port: 8009 
       },
       datasources: [{
         name: 'fix_statii',
@@ -52,16 +53,31 @@ var expect = require('chai').expect,
     }
   };
 
-
 describe('Testing the environments', function () {
+  it ('Create lib', function () {
+    this.timeout(1e42);
+    return setGlobal('factory', require('../src/')(execlib));
+  });
   it ('Remote connectivity', function (done) {
+    this.timeout(1e42);
     var env = factory(desc);
+    env.attachListener('state', function (){
+      console.log('state changed', arguments);
+    });
+    qlib.promise2console(env.login({
+      'username': 'indata',
+      'password': '123'
+    }), 'login').then(
+    );
+    /*
     env.go().then(function (env) {
       console.log('Remote environment', env);
       done();
       done = null;
     });
+    */
   });
+  /*
   it ('Remote data source', function (done) {
     var env = factory(desc);
     env.go().then(onEnvironment);
@@ -74,4 +90,5 @@ describe('Testing the environments', function () {
       //done = null;
     }
   });
+  */
 });

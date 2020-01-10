@@ -1,4 +1,4 @@
-function createBusyLogicCreator (execlib) {
+function createBusyLogicCreator (execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib,
@@ -94,7 +94,7 @@ function createBusyLogicCreator (execlib) {
     this.emitData();
   };
 
-  return BusyLogic;
+  dataSourceRegistry.register('busylogic', BusyLogic);
 }
 
 module.exports = createBusyLogicCreator;

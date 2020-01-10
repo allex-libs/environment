@@ -1,8 +1,9 @@
-function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
+function createDataSourceTaskBase (execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib,
-    q = lib.q;
+    q = lib.q,
+    DataSourceSinkBase = dataSourceRegistry.get('sinkbase');
 
   function DataSourceTaskBase (tasksink, options){
     DataSourceSinkBase.call(this, tasksink, options);
@@ -82,7 +83,7 @@ function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
     return DataSourceSinkBase.prototype.setFilter.call(this, filter);
   };
 
-  return DataSourceTaskBase;
+  dataSourceRegistry.register('taskbase', DataSourceTaskBase);
 }
 
 module.exports = createDataSourceTaskBase;

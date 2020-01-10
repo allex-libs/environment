@@ -1,7 +1,8 @@
-function createAllexStateDataSource (execlib, DataSourceBase) {
+function createAllexStateDataSource (execlib, dataSourceRegistry) {
   'use strict';
 
-  var lib = execlib.lib;
+  var lib = execlib.lib,
+    DataSourceBase = dataSourceRegistry.get('.');
 
   function AllexState (sink, options) {
     DataSourceBase.call(this, options);
@@ -29,6 +30,7 @@ function createAllexStateDataSource (execlib, DataSourceBase) {
     this.sink = null;
     DataSourceBase.prototype.destroy.call(this);
   };
+  AllexState.IsSingleSink = true;
   AllexState.prototype.setTarget = function (target) {
     if (!this.sink) return;
     DataSourceBase.prototype.setTarget.call(this, target);
@@ -53,7 +55,7 @@ function createAllexStateDataSource (execlib, DataSourceBase) {
     }
   };
 
-  return AllexState;
+  dataSourceRegistry.register('allexstate', AllexState);
 }
 
 module.exports = createAllexStateDataSource;

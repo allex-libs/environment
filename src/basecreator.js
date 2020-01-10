@@ -1,8 +1,9 @@
-function createEnvironmentBase (execlib, leveldblib) {
+function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environmentRegistry) {
   'use strict';
 
   var lib = execlib.lib,
     q = lib.q,
+    qlib = lib.qlib,
     Configurable = lib.Configurable,
     ChangeableListenable = lib.ChangeableListenable;
 
@@ -26,6 +27,7 @@ function createEnvironmentBase (execlib, leveldblib) {
   function EnvironmentBase (config) {
     ChangeableListenable.call(this);
     Configurable.call(this, config);
+    this.jobs = new qlib.JobCollection();
     this.storages = new lib.DIContainer();
     this.dataSources = new lib.DIContainer();
     this.commands = new lib.Map();
@@ -66,6 +68,15 @@ function createEnvironmentBase (execlib, leveldblib) {
       this.dataSources.destroy();
     }
     this.dataSources = null;
+    if (this.storages) {
+      lib.containerDestroyAll(this.storages);
+      this.storages.destroy();
+    }
+    this.storages = null;
+    if (this.jobs) {
+      this.jobs.destroy();
+    }
+    this.jobs = null;
     Configurable.prototype.destroy.call(this);
     ChangeableListenable.prototype.destroy.call(this);
   };
@@ -175,6 +186,9 @@ function createEnvironmentBase (execlib, leveldblib) {
       dss.traverse(unregisterer.bind(null, dss));
     }
   };
+  EnvironmentBase.prototype.getDataSourceCtor = function (name) { //throws
+    return DataSourceRegistry.get(name);
+  };
   EnvironmentBase.prototype.createStorage = function (storagename) {
     if (this.isStorageBlocked(storagename)) {
       ///TODO: check if this is correct ....
@@ -253,7 +267,7 @@ function createEnvironmentBase (execlib, leveldblib) {
   };
   EnvironmentBase.prototype.DEFAULT_CONFIG = lib.dummyFunc;
 
-  return EnvironmentBase;
+  environmentRegistry.register('.', EnvironmentBase);
 }
 
 module.exports = createEnvironmentBase;

@@ -1,4 +1,4 @@
-function createDataSourceBase (execlib) {
+function createDataSourceBase (execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib;
@@ -36,7 +36,7 @@ function createDataSourceBase (execlib) {
     this.filter = filter;
   };
 
-  return DataSourceBase;
+  dataSourceRegistry.register('.', DataSourceBase);
 }
 
 module.exports = createDataSourceBase;

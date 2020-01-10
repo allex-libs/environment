@@ -1,7 +1,9 @@
-function createJSDataDataSource(execlib, DataSourceBase, BusyLogic) {
+function createJSDataDataSource(execlib, dataSourceRegistry) {
   'use strict';
 
-  var lib = execlib.lib;
+  var lib = execlib.lib,
+    DataSourceBase = dataSourceRegistry.get('.'),
+    BusyLogic = dataSourceRegistry.get('busylogic');
 
   function JSData (options) {
     DataSourceBase.call(this, options);
@@ -10,7 +12,10 @@ function createJSDataDataSource(execlib, DataSourceBase, BusyLogic) {
   }
   lib.inherit (JSData, DataSourceBase);
   JSData.prototype.destroy = function () {
-    this._bl.destroy();
+    if (this._bl) {
+      this._bl.destroy();
+    }
+    this._bl = null;
     this.data = null;
     DataSourceBase.prototype.destroy.call(this);
   };
@@ -37,13 +42,13 @@ function createJSDataDataSource(execlib, DataSourceBase, BusyLogic) {
     }
 
     if (this.data instanceof Object){
-      return lib.extend({}, this.data);
+      return lib.extend(lib.isArray(this.data) ? [] : {}, this.data);
     }
 
     return this.data;
   };
 
-  return JSData;
+  dataSourceRegistry.register('jsdata', JSData);
 }
 
 module.exports = createJSDataDataSource;

@@ -1,8 +1,10 @@
-function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
+function createAllexDataPlusLevelDBDataSource(execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib,
     taskRegistry = execlib.execSuite.taskRegistry,
+    DataSourceTaskBase = dataSourceRegistry.get('taskbase'),
+    BusyLogic = dataSourceRegistry.get('busylogic'),
     q = lib.q;
 
   function passthru (item) {
@@ -33,6 +35,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyL
     this._leveldb_sink_name = options.sinks.leveldb;
   }
   lib.inherit(AllexDataPlusLevelDB, DataSourceTaskBase);
+  AllexDataPlusLevelDB.IsMultiSink = 2;
   AllexDataPlusLevelDB.prototype.destroy = function () {
     this._leveldb_sink_name = null;
     this._bl.destroy();
@@ -131,7 +134,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyL
     return this.data.slice();
   };
 
-  return AllexDataPlusLevelDB;
+  dataSourceRegistry.register('allexdata+leveldb', AllexDataPlusLevelDB);
 }
 
 module.exports = createAllexDataPlusLevelDBDataSource;

@@ -1,8 +1,10 @@
-function createAllexDataPlusDataSource (execlib, DataSourceBase, BusyLogic) {
+function createAllexDataPlusDataSource (execlib, dataSourceRegistry) {
   'use strict';
   var lib = execlib.lib,
     taskRegistry = execlib.execSuite.taskRegistry,
     q = lib.q,
+    DataSourceBase = dataSourceRegistry.get('.'),
+    BusyLogic = dataSourceRegistry.get('busylogic'),
     unique = lib.arryOperations.unique, 
     difference = lib.arryOperations.difference;
 
@@ -59,7 +61,7 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase, BusyLogic) {
     this.data = null;
     DataSourceBase.prototype.destroy.call(this);
   };
-
+  AllexDataPlusData.prototype.IsMultiSink = 2;
 
   AllexDataPlusData.prototype.setTarget = function (target){
     if (!this.keys_sink) console.warn ('No keys sink');
@@ -232,7 +234,7 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase, BusyLogic) {
     return this.data.slice();
   };
 
-  return AllexDataPlusData;
+  dataSourceRegistry.register('allexdata+data', AllexDataPlusData);
 }
 
 module.exports = createAllexDataPlusDataSource;

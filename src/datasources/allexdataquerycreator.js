@@ -1,9 +1,11 @@
-function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) {
+function createAllexDataQueryDataSource(execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib,
     q = lib.q,
     taskRegistry = execlib.execSuite.taskRegistry,
+    DataSourceTaskBase = dataSourceRegistry.get('taskbase'),
+    BusyLogic = dataSourceRegistry.get('busylogic'),
     cnt = 0;
 
 
@@ -24,6 +26,7 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) 
     this.data = null;
     DataSourceTaskBase.prototype.destroy.call(this);
   };
+  AllexDataQuery.IsSingleSink = true;
 
   AllexDataQuery.prototype.setTarget = function (target) {
     this._bl.setTarget(target);
@@ -68,7 +71,7 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) 
     return this.data.slice();
   };
 
-  return AllexDataQuery;
+  dataSourceRegistry.register('allexdataquery', AllexDataQuery);
 }
 
 module.exports = createAllexDataQueryDataSource;

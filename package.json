@@ -1,6 +1,6 @@
 {
   "name": "allex_environmentlib",
-  "version": "1.0.6",
+  "version": "2.0.0",
   "description": "AllEx environment lib",
   "main": "src/index.js",
   "scripts": {
@@ -9,6 +9,9 @@
   "repository": {
     "type": "git",
     "url": "git@github.com:allex-libs/environment.git"
+  },
+  "devDependencies": {
+    "allex_arrayoperationslowlevellib": "1.x"
   },
   "keywords": [
     "ecosystem:allex"

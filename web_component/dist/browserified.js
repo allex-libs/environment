@@ -1,78 +1,89 @@
-(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-ALLEX.execSuite.libRegistry.register('allex_environmentlib',require('./src/index')(ALLEX));
-ALLEX.WEB_COMPONENTS.allex_environmentlib = ALLEX.execSuite.libRegistry.get('allex_environmentlib');
+(function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
+var lR = ALLEX.execSuite.libRegistry;
+lR.register('allex_environmentlib',require('./src/libindex')(
+  ALLEX,
+  lR.get('allex_leveldblib'),
+  lR.get('allex_userrepresentationlib')
+));
+ALLEX.WEB_COMPONENTS.allex_environmentlib = lR.get('allex_environmentlib');
 
-},{"./src/index":18}],2:[function(require,module,exports){
-function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
+},{"./src/libindex":21}],2:[function(require,module,exports){
+function createAllexEnvironment (execlib, environmentRegistry, CommandBase) {
   'use strict';
 
   var lib = execlib.lib,
-    q = lib.q;
+    q = lib.q,
+    EnvironmentBase = environmentRegistry.get('.');
+
+  function LocalCommand (options) {
+    if (!(options && lib.isFunction(options.func))) {
+      throw new Error('options for the LocalCommand ctor must be a hash with the "func" property - that IsA Function');
+    }
+    CommandBase.call(this);
+    this.func = options.func;
+  }
+  lib.inherit(LocalCommand, CommandBase);
+  LocalCommand.prototype.destroy = function () {
+    this.func = null;
+  };
+  LocalCommand.prototype.doExecute = function (args) {
+    if (!lib.isFunction(this.func)) {
+      throw new Error (this.ctor.name+' lost its func, cannot execute');
+    }
+    var funcret = this.func.apply(null, args);
+    if (q.isThenable(funcret)) {
+      return funcret;
+    }
+    return q(funcret);
+  };
   
   function AllexEnvironment (options) {
     EnvironmentBase.call(this, options);
   }
   lib.inherit (AllexEnvironment, EnvironmentBase);
   AllexEnvironment.prototype.createDataSource = function (type, options) {
-    if (options && options.sinks) {
-      return this.createMultiSinkDataSource (type, options);
-    }
-    if (!options || !options.sink) {
+    var ctor = this.getDataSourceCtor(type);
+    if (!options || !options.sink && !options.sinks) {
       return this.createSinkLessSource (type, options);
     }
-    return this.findSink(options.sink).then(
-      this.onSinkForCreateDataSource.bind(this, type, options)
-    );
+    if (options && options.sinks) {
+      if (!ctor.IsMultiSink) {
+        throw new Error('DataSource type '+type+' is not of a MultiSink type');
+      }
+      return this.createMultiSinkDataSource (ctor, options);
+    }
+    if (options && options.sink) {
+      if (!ctor.IsSingleSink) {
+        throw new Error('DataSource type '+type+' is not of a SingleSink type');
+      }
+      return this.findSink(options.sink).then(
+        this.onSinkForCreateDataSource.bind(this, ctor, options)
+      );
+    }
+    console.error(options);
+    throw new Error('Malformed options for type '+type);
   };
 
   AllexEnvironment.prototype.createSinkLessSource = function (type, options) {
     var ctor;
     switch (type) {
       case 'jsdata': 
-        ctor = dataSourceRegistry.JSData;
+        break;
+      case 'localhash2array': 
         break;
       case 'commandwaiter':
-        ctor = dataSourceRegistry.AllexCommandDataWaiter;
         break;
       default:
-        throw new lib.Error('DATASOURCE_TYPE_NOT_APPLICABLE_TO_ALLEX_ENVIRONMENT', type);
+        throw new lib.Error('DATASOURCE_TYPE_NOT_APPLICABLE_TO_ALLEX_ENVIRONMENT', 'DataSource type '+type+' is not supported by createSinkLessSource');
     }
+    ctor = this.getDataSourceCtor(type);
 
     return q (new ctor(options));
   };
 
-  AllexEnvironment.prototype.onSinkForCreateDataSource = function (type, options, sink) {
-    var ctor;
-    switch (type) {
-      case 'allexleveldb':
-        ctor = dataSourceRegistry.AllexLevelDB;
-        break;
-      case 'allexstate':
-        ctor = dataSourceRegistry.AllexState;
-        break;
-      case 'allexhash2array':
-        ctor = dataSourceRegistry.AllexHash2Array;
-        break;
-      case 'allexdataquery':
-        ctor = dataSourceRegistry.AllexDataQuery;
-        break;
-      default:
-        throw new lib.Error('DATASOURCE_TYPE_NOT_APPLICABLE_TO_ALLEX_ENVIRONMENT', type);
-    }
+  AllexEnvironment.prototype.onSinkForCreateDataSource = function (ctor, options, sink) {
     return q(new ctor(sink, options));
   };
-
-  /*
-     {  
-        name: 'clubs',                                                                                                         
-        type: 'allexdataquery',                                                                                                 
-        options: {                                                                                                              
-          sinks : {
-            data: 'Clubs'                                                                                                          bank: 'AgentBank'
-          }
-        }                                                                                                                       
-
-  */
 
   AllexEnvironment.prototype.sinkfinder = function (promises, sinks, sinkname, sinkreference) {
     var d = q.defer(), Err = lib.Error;
@@ -89,44 +100,34 @@ function createAllexEnvironment (execlib, dataSourceRegistry, EnvironmentBase) {
       sinkreference = null;
       d = null;
     });
-    //d.promise.done (console.log.bind(console, 'got sink', sinkname), console.log.bind(console, 'failed sink', sinkname));
     promises.push(d.promise);
   }
 
-  AllexEnvironment.prototype.createMultiSinkDataSource = function (type, options) {
+  AllexEnvironment.prototype.createMultiSinkDataSource = function (ctor, options) {
     var promises = [], sinks = {}, _p = promises, _s = sinks;
     lib.traverseShallow(options.sinks, this.sinkfinder.bind(this, _p, _s));
     _p = null;
     _s = null;
-    return q.all(promises).then(this.onSinksReady.bind(this, type, sinks, options));
+    return q.all(promises).then(this.onSinksReady.bind(this, ctor, sinks, options));
   };
 
-  AllexEnvironment.prototype.onSinksReady = function (type, sinks, options) {
-    var ctor;
-    switch (type) {
-      /*
-      case 'allexdata+bank':
-        ctor = dataSourceRegistry.AllexDataPlusBank;
-        break;
-        */
-      case 'allexdata+leveldb':
-        ctor = dataSourceRegistry.AllexDataPlusLevelDB;
-        break;
-      case 'allexdata+data':
-        ctor = dataSourceRegistry.AllexDataPlusData;
-        break;
-      default:
-        throw new lib.Error('DATASOURCE_TYPE_NOT_APPLICABLE_TO_ALLEX_ENVIRONMENT', type);
-    }
+  AllexEnvironment.prototype.onSinksReady = function (ctor, sinks, options) {
     return q(new ctor(sinks, options));
   };
 
   AllexEnvironment.prototype.createCommand = function (options) {
-    throw new lib.Error('NOT_IMPLEMENTED_YET', 'Base AllexEnvironment still has to come up with methods to implement sink calls');
-    console.log('command options', options);
+    var ctor;
+    switch (options.type) {
+      case 'local':
+        ctor = LocalCommand;
+        break;
+      default: 
+        throw new lib.Error('NOT_IMPLEMENTED_YET', options.type+' is not an applicable Command type for AllexEnvironment');
+    }
+    return new ctor(options.options);
   };
 
-  return AllexEnvironment;
+  environmentRegistry.register('allexbase', AllexEnvironment);
 }
 
 module.exports = createAllexEnvironment;
@@ -139,20 +140,26 @@ function protocolSecurer (protocol) {
     return protocol;
 }
 
-function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnvironment, UserRepresentation) {
+function createAllexRemoteEnvironment (execlib, environmentRegistry, UserRepresentation, CommandBase) {
   'use strict';
 
   var lib = execlib.lib,
     q = lib.q,
     qlib = lib.qlib,
     remoteStorageName = 'remoteenvironmentstorage',
-    letMeInHeartBeat = lib.intervals.Second;
+    letMeInHeartBeat = lib.intervals.Second,
+    AllexEnvironment = environmentRegistry.get('allexbase'),
+    mixins = require('./remotemixins')(lib),
+    HotelAndApartmentHandlerMixin = mixins.HotelAndApartmentHandlerMixin,
+    jobs = require('./remotejobs')(execlib, mixins);
 
   function AllexRemoteCommand (representation, options) {
+    CommandBase.call(this);
     this.representation = null;
     this.methodname = options.name;
     this.setRepresentation(representation, options.sink);
   }
+  lib.inherit(AllexRemoteCommand, CommandBase);
   AllexRemoteCommand.prototype.destroy = function () {
     this.methodname = null;
     this.methodname = null;
@@ -164,11 +171,7 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     }
     this.representation = representation.subsinks[sinkname];
   };
-  AllexRemoteCommand.prototype.execute = function (args) {
-    if (!lib.isArray(args)) {
-      console.warn('Supressing sink call');
-      return q.reject(new lib.Error('ARGUMENTS_FOR_COMMAND_EXECUTION_MUST_BE_AN_ARRAY'));
-    }
+  AllexRemoteCommand.prototype.doExecute = function (args) {
     args.unshift(this.methodname);
     return this.representation.waitForSink().then(
       this.onSink.bind(this, args)
@@ -308,93 +311,61 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
       lib.arryOperations.appendNonExistingItems (options.blockStorages, [remoteStorageName]);
     }
     AllexEnvironment.call(this, options);
+    HotelAndApartmentHandlerMixin.call(this);
     if (!options.entrypoint) {
       throw new lib.JSONizingError('NO_ENTRYPOINT_DESC', options, 'No entrypoint descriptor:');
     }
     this.address = options.entrypoint.address;
     this.port = options.entrypoint.port;
-    this.identity = options.entrypoint.identity;
     this.userRepresentation = null;
-    this.hotelSinkDestroyedListener = null;
-    this.apartmentSinkDestroyedListener = null;
-    this.pendingRequest = 0;
-    this.pendingRequests = new lib.Map();
-    this.loginData = null;
     this.sessionid = null;
     this.secondphasesessionid = null;
+    this.jobs = new qlib.JobCollection();
     this.checkForSessionId();
     this.createStorage(remoteStorageName);
   }
   lib.inherit(AllexRemoteEnvironment, AllexEnvironment);
+  HotelAndApartmentHandlerMixin.addMethods(AllexRemoteEnvironment);
   AllexRemoteEnvironment.prototype.destroy = function () {
-    this.purgeHotelSinkDestroyedListener();
-    this.purgeApartmentSinkDestroyedListener();
-    this.secondphasesessionid = null;
-    this.loginData = null;
-    if (this.pendingRequests) {
-      this.pendingRequests.destroy();
+    var as = this.apartmentSink;
+    if (this.jobs) {
+      this.jobs.destroy();
     }
-    this.pendingRequests = null;
-    this.pendingRequest = null;
+    this.jobs = null;
+    this.secondphasesessionid = null;
+    this.sessionid = null;
     if (this.userRepresentation) {
       this.userRepresentation.destroy();
     }
     this.userRepresentation = null;
-    this.identity = null;
     this.port = null;
     this.address = null;
-    this.sessionid = null;
-  };
-  AllexRemoteEnvironment.prototype.purgeHotelSinkDestroyedListener = function () {
-    if (this.hotelSinkDestroyedListener) {
-      this.hotelSinkDestroyedListener.destroy();
+    HotelAndApartmentHandlerMixin.prototype.destroy.call(this);
+    AllexEnvironment.prototype.destroy.call(this);
+    if (as) {
+      as.destroy(); //will trigger destroy on hotelSink
     }
-    this.hotelSinkDestroyedListener = null;
   };
-  AllexRemoteEnvironment.prototype.onHotelSinkDestroyed = function () {
-    this.purgeHotelSinkDestroyedListener();
-    lib.runNext(this.checkForSessionId.bind(this), 100+Math.random()*1000);
-  };
-  AllexRemoteEnvironment.prototype.purgeApartmentSinkDestroyedListener = function () {
-    if (this.apartmentSinkDestroyedListener) {
-      this.apartmentSinkDestroyedListener.destroy();
-    }
-    this.apartmentSinkDestroyedListener = null;
+  AllexRemoteEnvironment.prototype.setApartmentSink = function (sink) {
+    this.recreateUserRepresentation();
+    this.userRepresentation.setSink(sink);
+    HotelAndApartmentHandlerMixin.prototype.setApartmentSink.call(this, sink);
+    this.set('state', 'established');
   };
   AllexRemoteEnvironment.prototype.onApartmentSinkDestroyed = function () {
-    this.purgeApartmentSinkDestroyedListener();
-    lib.runNext(this.checkForSessionId.bind(this), 100+Math.random()*1000);
+    HotelAndApartmentHandlerMixin.prototype.onApartmentSinkDestroyed.call(this);
+    this.checkForSessionId();
   };
-  AllexRemoteEnvironment.prototype.checkForSessionId = function (defer) {
-    this.set('state', 'pending');
-    this.getFromStorage(remoteStorageName, 'sessionid').then(
-      this.onSessionId.bind(this, defer),
-      this.onGetSessionIDFromStorageFailed.bind(this, defer)
+  AllexRemoteEnvironment.prototype.checkForSessionId = function () {
+    return this.jobs.run('.', new jobs.CheckSessionJob(this, remoteStorageName)).then(
+      this.loginWithSession.bind(this)
     );
-    defer = null;
   };
-  AllexRemoteEnvironment.prototype.onGetSessionIDFromStorageFailed = function (defer) {
-    if (defer) {
-      defer.reject(new lib.Error('NO_SESSION_ID'));
-      return;
-    }
-    this.set('state', 'loggedout');
-    defer = null;
+  AllexRemoteEnvironment.prototype.loginWithSession = function (sessionid) {
+    return this.login({__sessions__id: sessionid.sessionid}, null, 'letMeInWithSession');
   };
-  AllexRemoteEnvironment.prototype.onSessionId = function (defer, sessionid) {
-    this.sessionid = sessionid;
-    if (!sessionid) {
-      if (defer) {
-        defer.reject(new lib.Error('NO_SESSION_ID'));
-      }
-      this.set('state', 'loggedout');
-      defer = null;
-      return;
-    }
-    this.login({__sessions__id: sessionid.sessionid}, defer, 'letMeInWithSession');
-    defer = null;
-  };
-  function callWebMethodResolver(defer,res){
+
+  function webMethodResolver(defer,res){
     if (res.status === 200){
       if (!!res.response){
         defer.resolve(JSON.parse(res.response));
@@ -409,34 +380,20 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     var d = q.defer();
     lib.request(protocolSecurer('http')+'://'+this.address+':'+this.port+'/'+methodname, {
       parameters: datahash,
-      onComplete: callWebMethodResolver.bind(null,d),
+      onComplete: webMethodResolver.bind(null,d),
       onError: d.reject.bind(d)
     });
     return d.promise;
   };
   AllexRemoteEnvironment.prototype.register = function (datahash) {
-    //return this._callWebMethod('register', datahash);
-    var d = q.defer();
-    this.login(datahash, d, 'register');
-    return d.promise;
+    return this.login(datahash, null, 'register');
   };
   AllexRemoteEnvironment.prototype.usernameExists = function (datahash) {
     //datahash <=> {username: 'micatatic'}
     return this._callWebMethod('usernameExists', datahash);
   };
   AllexRemoteEnvironment.prototype.login = function (credentials, defer, entrypointmethod) {
-    if (this.loginData) {
-      return q;
-    }
-    if (!credentials) {
-      return q.reject(new lib.Error('CANNOT_LOGIN', 'Cannot login without credentials'));
-    }
-    this.loginData = {credentials: credentials, method: entrypointmethod};
-    this.recreateUserRepresentation();
-    return execlib.loadDependencies('client', [
-      '.',
-      'allex:hotel'
-    ], qlib.executor(this.sendLetMeInRequest.bind(this, credentials, defer, entrypointmethod)));
+    return this.jobs.run('.', new jobs.LoginJob(this, remoteStorageName, protocolSecurer, letMeInHeartBeat, credentials, entrypointmethod, defer));
   };
   AllexRemoteEnvironment.prototype.findSink = function (sinkname) {
     if (sinkname === '.') {
@@ -445,7 +402,10 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     return q(this.userRepresentation.subsinks[sinkname]);
   };
   AllexRemoteEnvironment.prototype.createCommand = function (options) {
-    var ctor;
+    var baseret, ctor;
+    try {
+      return AllexEnvironment.prototype.createCommand.call(options);
+    } catch (ignore) {}
     if (!options) {
       throw Error ('no options');
     }
@@ -468,106 +428,6 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     }
     return new ctor(this.userRepresentation, options);
   };
-  AllexRemoteEnvironment.prototype.sendLetMeInRequest = function (credentials, d, entrypointmethod) {
-    if (this.pendingRequest === null) {
-      return;
-    }
-    if (this.pendingRequest > 0) {
-      return;
-    }
-    this.pendingRequest = Date.now();
-    d = d || q.defer();
-    this.pendingRequests.add(this.pendingRequest, true);
-    lib.request(protocolSecurer('http')+'://'+this.address+':'+this.port+'/'+ (entrypointmethod || 'letMeIn'), {
-      /*
-      parameters: {
-        username: credentials.username,
-        password: credentials.password
-      },
-      */
-      parameters: credentials,
-      onComplete: this.onLetMeInResponse.bind(this, this.pendingRequest, credentials, d),
-      onError: this.onLetMeInRequestFail.bind(this, this.pendingRequest, d)
-    });
-    lib.runNext(this.retryLetMeInIfStalled.bind(this, this.pendingRequest, d), 10*letMeInHeartBeat);
-    credentials = null;
-    return d.promise;
-  };
-  AllexRemoteEnvironment.prototype.retryLetMeInIfStalled = function (pr, d) {
-    var lid;
-    if (!this.pendingRequests) {
-      return;
-    }
-    if (this.pendingRequests.count > 2) {
-      return;
-    }
-    if (this.pendingRequest === pr) {
-      lid = this.loginData;
-      this.loginData = null;
-      this.pendingRequest = 0;
-      if (lid) {
-        this.login(lid.credentials, d, lid.method);
-      } else {
-        this.checkForSessionId(d);
-      }
-    }
-  };
-  AllexRemoteEnvironment.prototype.onLetMeInResponse = function (pr, credentials, defer, response) {
-    if (!this.pendingRequests) {
-      return;
-    }
-    this.pendingRequests.remove(pr);
-    if (this.pendingRequest !== pr) {
-      return;
-    }
-    if (!response) {
-      this.giveUp(credentials, defer);
-      return;
-    }
-    if ('data' in response){
-      response = response.data;
-    } else if ('response' in response) {
-      response = response.response;
-    }
-
-    if (response) {
-      try {
-        var response = JSON.parse(response);
-
-        if (response.error) {
-          console.log('response.error', response.error);
-          if (response.error==='NO_TARGETS_YET' || response.error==='NO_DB_YET') {
-            lib.runNext(this.checkForSessionId.bind(this, defer), letMeInHeartBeat);
-            return;
-          }
-        }
-        if (response.secondphase) {
-          this.pendingRequest = 0;
-          this.loginData = null;
-          this.secondphasesessionid = response.secondphase;
-          this.delFromStorage(remoteStorageName, 'sessionid').then (
-            defer.resolve.bind(defer, this.set('state', 'secondphase')) //yes, 'state' is set immediately
-          );
-          return;
-        }
-        if (!(response.ipaddress && response.port && response.session)) {
-          this.giveUp(credentials, defer);
-          return;
-        }
-        this.pendingRequest = Date.now(); //ack that we've got the initial response
-        this._acquireSinkOnHotel (response, defer);
-
-      } catch(e) {
-        console.error('problem with', response);
-        //console.error(e.stack);
-        console.error(e);
-        //error handling
-        this.giveUp(credentials, defer);
-      }
-    }
-    defer = null;
-  };
-
   AllexRemoteEnvironment.prototype.recreateUserRepresentation = function () {
     this.set('state', 'pending');
     if (this.userRepresentation) {
@@ -576,90 +436,6 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
     this.userRepresentation = new UserRepresentation();
   };
 
-  AllexRemoteEnvironment.prototype.acquireSinkOnHotel = function (params) {
-    var defer = q.defer();
-    this.recreateUserRepresentation();
-    this._acquireSinkOnHotel (params, defer);
-    return defer.promise;
-  };
-
-  AllexRemoteEnvironment.prototype._acquireSinkOnHotel = function (params, defer) {
-    var protocol = protocolSecurer('ws');
-
-    execlib.execSuite.taskRegistry.run('acquireSink', {
-      connectionString: protocol+'://'+params.ipaddress+':'+params.port,
-      session: params.session,
-      onSink:this._onSink.bind(this, defer, params.session),
-      onCannotConnect : defer.reject.bind(defer),
-      singleshot: true
-    });
-  };
-
-  AllexRemoteEnvironment.prototype.onLetMeInRequestFail = function (pendingrequest, d, reason) {
-    var lastrun;
-    if (!this.pendingRequests) {
-      return;
-    }
-    this.pendingRequests.remove(pendingrequest);
-    lastrun = Date.now() - this.pendingRequest;
-    this.set('error', reason);
-    if (lastrun >= letMeInHeartBeat) {
-      this.reRunCheckSession(d);
-    } else {
-      lib.runNext(this.reRunCheckSession.bind(this, d), letMeInHeartBeat-lastrun+1); //1=>safety margin
-    }
-  };
-  AllexRemoteEnvironment.prototype.reRunCheckSession = function (defer) {
-    if (Date.now() - this.pendingRequest < letMeInHeartBeat) {
-      defer.reject(new lib.Error('ANOTHER_PENDING_REQUEST_ALREADY_ACTIVE', 'Another pending request is already active'));
-      return;
-    }
-    this.loginData = null;
-    this.pendingRequest = 0;
-    this.checkForSessionId(defer);
-  };
-  AllexRemoteEnvironment.prototype._onSink = function (defer, sessionid, sink) {
-    if (!sink) {
-      this.checkForSessionId();
-      return;
-    }
-    if (!sink.destroyed) {
-      this.checkForSessionId();
-      return;
-    }
-    this.purgeHotelSinkDestroyedListener();
-    this.hotelSinkDestroyedListener = sink.destroyed.attach(this.onHotelSinkDestroyed.bind(this));
-    execlib.execSuite.taskRegistry.run('acquireUserServiceSink', {
-      sink: sink,
-      cb: this._onAcquired.bind(this, defer, sessionid)
-    });
-    defer = null;
-  };
-  AllexRemoteEnvironment.prototype._onAcquired = function (defer, sessionid, sink) {
-    this.userRepresentation.setSink(sink);
-    //console.log(this.userRepresentation);
-    this.pendingRequest = 0;
-    if (!sink) {
-      this.checkForSessionId();
-      return;
-    }
-    if (!sink.destroyed) {
-      this.checkForSessionId();
-      return;
-    }
-    this.purgeApartmentSinkDestroyedListener();
-    this.apartmentSinkDestroyedListener = sink.destroyed.attach(this.onApartmentSinkDestroyed.bind(this));
-    this.sessionid = sessionid;
-    return qlib.promise2defer(this.putToStorage(remoteStorageName, 'sessionid', {sessionid: sessionid, token: lib.uid()}).then(
-      this.onSessionIdSaved.bind(this)
-    ), defer);
-    //return qlib.promise2defer(q(this.set('state', 'established')), defer);
-  };
-  AllexRemoteEnvironment.prototype.onSessionIdSaved = function () {
-    this.loginData = null;
-    this.secondphasesessionid = null;
-    return q(this.set('state', 'established'));
-  };
   AllexRemoteEnvironment.prototype.giveUp = function (credentials, defer) {
     this.pendingRequest = 0;
     this.loginData = null;
@@ -744,18 +520,19 @@ function createAllexRemoteEnvironment (execlib, dataSourceRegistry, AllexEnviron
 
 
 
-  return AllexRemoteEnvironment;
+  environmentRegistry.register('allexremote', AllexRemoteEnvironment);
 
 }
 
 module.exports = createAllexRemoteEnvironment;
 
-},{}],4:[function(require,module,exports){
-function createEnvironmentBase (execlib, leveldblib) {
+},{"./remotejobs":26,"./remotemixins":31}],4:[function(require,module,exports){
+function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environmentRegistry) {
   'use strict';
 
   var lib = execlib.lib,
     q = lib.q,
+    qlib = lib.qlib,
     Configurable = lib.Configurable,
     ChangeableListenable = lib.ChangeableListenable;
 
@@ -779,6 +556,7 @@ function createEnvironmentBase (execlib, leveldblib) {
   function EnvironmentBase (config) {
     ChangeableListenable.call(this);
     Configurable.call(this, config);
+    this.jobs = new qlib.JobCollection();
     this.storages = new lib.DIContainer();
     this.dataSources = new lib.DIContainer();
     this.commands = new lib.Map();
@@ -819,6 +597,15 @@ function createEnvironmentBase (execlib, leveldblib) {
       this.dataSources.destroy();
     }
     this.dataSources = null;
+    if (this.storages) {
+      lib.containerDestroyAll(this.storages);
+      this.storages.destroy();
+    }
+    this.storages = null;
+    if (this.jobs) {
+      this.jobs.destroy();
+    }
+    this.jobs = null;
     Configurable.prototype.destroy.call(this);
     ChangeableListenable.prototype.destroy.call(this);
   };
@@ -928,6 +715,9 @@ function createEnvironmentBase (execlib, leveldblib) {
       dss.traverse(unregisterer.bind(null, dss));
     }
   };
+  EnvironmentBase.prototype.getDataSourceCtor = function (name) { //throws
+    return DataSourceRegistry.get(name);
+  };
   EnvironmentBase.prototype.createStorage = function (storagename) {
     if (this.isStorageBlocked(storagename)) {
       ///TODO: check if this is correct ....
@@ -1006,16 +796,40 @@ function createEnvironmentBase (execlib, leveldblib) {
   };
   EnvironmentBase.prototype.DEFAULT_CONFIG = lib.dummyFunc;
 
-  return EnvironmentBase;
+  environmentRegistry.register('.', EnvironmentBase);
 }
 
 module.exports = createEnvironmentBase;
 
 },{}],5:[function(require,module,exports){
-function createAllexCommandDataWaiter(execlib, JSData) {
+function createCommandBase (lib) {
   'use strict';
 
-  var lib = execlib.lib;
+  function CommandBase () {
+  };
+  CommandBase.prototype.destroy = lib.dummyFunc;
+  CommandBase.prototype.execute = function (args) {
+    if (!lib.isArray(args)) {
+      console.warn('Supressing command execution');
+      return lib.q.reject(new lib.Error('ARGUMENTS_FOR_COMMAND_EXECUTION_MUST_BE_AN_ARRAY', 'Arguments for comand execution have to be in a single Array'));
+    }
+    return this.doExecute(args);
+  };
+  CommandBase.prototype.doExecute = function (args) {
+    throw new Error('CommandBase does not implement the doExecute method, descendant needs to override');
+  };
+
+  return CommandBase;
+}
+
+module.exports = createCommandBase;
+
+},{}],6:[function(require,module,exports){
+function createAllexCommandDataWaiter(execlib, dataSourceRegistry) {
+  'use strict';
+
+  var lib = execlib.lib,
+    JSData = dataSourceRegistry.get('jsdata');
 
   function AllexCommandDataWaiter (options) {
     options.data = [];
@@ -1030,17 +844,19 @@ function createAllexCommandDataWaiter(execlib, JSData) {
     this.setData();
   };
 
-  return AllexCommandDataWaiter;
+  dataSourceRegistry.register('commandwaiter', AllexCommandDataWaiter);
 }
 
 module.exports = createAllexCommandDataWaiter;
 
-},{}],6:[function(require,module,exports){
-function createAllexDataPlusDataSource (execlib, DataSourceBase, BusyLogic) {
+},{}],7:[function(require,module,exports){
+function createAllexDataPlusDataSource (execlib, dataSourceRegistry) {
   'use strict';
   var lib = execlib.lib,
     taskRegistry = execlib.execSuite.taskRegistry,
     q = lib.q,
+    DataSourceBase = dataSourceRegistry.get('.'),
+    BusyLogic = dataSourceRegistry.get('busylogic'),
     unique = lib.arryOperations.unique, 
     difference = lib.arryOperations.difference;
 
@@ -1097,7 +913,7 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase, BusyLogic) {
     this.data = null;
     DataSourceBase.prototype.destroy.call(this);
   };
-
+  AllexDataPlusData.prototype.IsMultiSink = 2;
 
   AllexDataPlusData.prototype.setTarget = function (target){
     if (!this.keys_sink) console.warn ('No keys sink');
@@ -1270,17 +1086,19 @@ function createAllexDataPlusDataSource (execlib, DataSourceBase, BusyLogic) {
     return this.data.slice();
   };
 
-  return AllexDataPlusData;
+  dataSourceRegistry.register('allexdata+data', AllexDataPlusData);
 }
 
 module.exports = createAllexDataPlusDataSource;
 
-},{}],7:[function(require,module,exports){
-function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
+},{}],8:[function(require,module,exports){
+function createAllexDataPlusLevelDBDataSource(execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib,
     taskRegistry = execlib.execSuite.taskRegistry,
+    DataSourceTaskBase = dataSourceRegistry.get('taskbase'),
+    BusyLogic = dataSourceRegistry.get('busylogic'),
     q = lib.q;
 
   function passthru (item) {
@@ -1311,6 +1129,7 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyL
     this._leveldb_sink_name = options.sinks.leveldb;
   }
   lib.inherit(AllexDataPlusLevelDB, DataSourceTaskBase);
+  AllexDataPlusLevelDB.IsMultiSink = 2;
   AllexDataPlusLevelDB.prototype.destroy = function () {
     this._leveldb_sink_name = null;
     this._bl.destroy();
@@ -1409,18 +1228,20 @@ function createAllexDataPlusLevelDBDataSource(execlib, DataSourceTaskBase, BusyL
     return this.data.slice();
   };
 
-  return AllexDataPlusLevelDB;
+  dataSourceRegistry.register('allexdata+leveldb', AllexDataPlusLevelDB);
 }
 
 module.exports = createAllexDataPlusLevelDBDataSource;
 
-},{}],8:[function(require,module,exports){
-function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) {
+},{}],9:[function(require,module,exports){
+function createAllexDataQueryDataSource(execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib,
     q = lib.q,
     taskRegistry = execlib.execSuite.taskRegistry,
+    DataSourceTaskBase = dataSourceRegistry.get('taskbase'),
+    BusyLogic = dataSourceRegistry.get('busylogic'),
     cnt = 0;
 
 
@@ -1441,6 +1262,7 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) 
     this.data = null;
     DataSourceTaskBase.prototype.destroy.call(this);
   };
+  AllexDataQuery.IsSingleSink = true;
 
   AllexDataQuery.prototype.setTarget = function (target) {
     this._bl.setTarget(target);
@@ -1485,59 +1307,52 @@ function createAllexDataQueryDataSource(execlib, DataSourceTaskBase, BusyLogic) 
     return this.data.slice();
   };
 
-  return AllexDataQuery;
+  dataSourceRegistry.register('allexdataquery', AllexDataQuery);
 }
 
 module.exports = createAllexDataQueryDataSource;
 
-},{}],9:[function(require,module,exports){
-function createAllexHash2ArrayDataSource (execlib, AllexState) {
+},{}],10:[function(require,module,exports){
+function createAllexHash2ArrayDataSource (execlib, dataSourceRegistry) {
   'use strict';
 
-  var lib = execlib.lib;
+  var lib = execlib.lib,
+    Hash2ArrayMixin = dataSourceRegistry.get('hash2arraymixin'),
+    AllexState = dataSourceRegistry.get('allexstate');
 
   function AllexHash2Array(sink, options) {
     AllexState.call(this, sink, options);
-    this.columnnames = options.columnnames;
+    Hash2ArrayMixin.call(this, options);
   }
   lib.inherit(AllexHash2Array, AllexState);
-  function recordpacker (obj, result, itemname) {
-    if (obj && obj.hasOwnProperty && obj.hasOwnProperty(itemname)) {
-      result.push(obj[itemname]);
-    }
-    return result;
-  }
+  AllexHash2Array.prototype.destroy = function () {
+    Hash2ArrayMixin.prototype.destroy.call(this);
+    AllexState.prototype.destroy.call(this);
+  };
+  Hash2ArrayMixin.addMethods(AllexHash2Array);
+  AllexHash2Array.IsSingleSink = true;
 
-  function packer (colnames, arry, thingy, pk) {
-    var record = [pk];
-    if (lib.isArray(colnames) && colnames.length) {
-      colnames.reduce(recordpacker.bind(null, thingy), record);
-    } else {
-      record.push(thingy);
-    }
-    arry.push(record);
-  }
   AllexHash2Array.prototype.onStateData = function (data) {
     if (!this.target) {
       console.log('no target? too bad for', data);
       return;
     }
-    var ret = [];
-    lib.traverseShallow(data, packer.bind(null, this.columnnames, ret));
-    this.target.set('data', ret);
+    this.target.set('data', this.packHash2Array(data));
   };
 
-  return AllexHash2Array;
+  dataSourceRegistry.register('allexhash2array', AllexHash2Array);
 }
 
 module.exports = createAllexHash2ArrayDataSource;
 
-},{}],10:[function(require,module,exports){
-function createAllexLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
+},{}],11:[function(require,module,exports){
+function createAllexLevelDBDataSource(execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib,
     taskRegistry = execlib.execSuite.taskRegistry,
+    DataSourceTaskBase = dataSourceRegistry.get('taskbase'),
+    BusyLogic = dataSourceRegistry.get('busylogic'),
     q = lib.q,
     COMMANDS = {
       'data' : {
@@ -1575,6 +1390,7 @@ function createAllexLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
     this.data = null;
     DataSourceTaskBase.prototype.destroy.call(this);
   };
+  AllexLevelDB.IsSingleSink = true;
 
   AllexLevelDB.prototype._resetData = function () {
     var init = COMMANDS[this.command_type].init;
@@ -1665,17 +1481,18 @@ function createAllexLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
     throw new Error('Unknow hook type', this.command_type);
   };
 
-  return AllexLevelDB;
+  dataSourceRegistry.register('allexleveldb', AllexLevelDB);
 }
 
 module.exports = createAllexLevelDBDataSource;
 
 
-},{}],11:[function(require,module,exports){
-function createAllexStateDataSource (execlib, DataSourceBase) {
+},{}],12:[function(require,module,exports){
+function createAllexStateDataSource (execlib, dataSourceRegistry) {
   'use strict';
 
-  var lib = execlib.lib;
+  var lib = execlib.lib,
+    DataSourceBase = dataSourceRegistry.get('.');
 
   function AllexState (sink, options) {
     DataSourceBase.call(this, options);
@@ -1703,6 +1520,7 @@ function createAllexStateDataSource (execlib, DataSourceBase) {
     this.sink = null;
     DataSourceBase.prototype.destroy.call(this);
   };
+  AllexState.IsSingleSink = true;
   AllexState.prototype.setTarget = function (target) {
     if (!this.sink) return;
     DataSourceBase.prototype.setTarget.call(this, target);
@@ -1727,13 +1545,13 @@ function createAllexStateDataSource (execlib, DataSourceBase) {
     }
   };
 
-  return AllexState;
+  dataSourceRegistry.register('allexstate', AllexState);
 }
 
 module.exports = createAllexStateDataSource;
 
-},{}],12:[function(require,module,exports){
-function createDataSourceBase (execlib) {
+},{}],13:[function(require,module,exports){
+function createDataSourceBase (execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib;
@@ -1771,13 +1589,13 @@ function createDataSourceBase (execlib) {
     this.filter = filter;
   };
 
-  return DataSourceBase;
+  dataSourceRegistry.register('.', DataSourceBase);
 }
 
 module.exports = createDataSourceBase;
 
-},{}],13:[function(require,module,exports){
-function createBusyLogicCreator (execlib) {
+},{}],14:[function(require,module,exports){
+function createBusyLogicCreator (execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib,
@@ -1873,46 +1691,88 @@ function createBusyLogicCreator (execlib) {
     this.emitData();
   };
 
-  return BusyLogic;
+  dataSourceRegistry.register('busylogic', BusyLogic);
 }
 
 module.exports = createBusyLogicCreator;
 
-},{}],14:[function(require,module,exports){
-function createDataSourceRegistry (execlib) {
+},{}],15:[function(require,module,exports){
+function createHash2ArrayMixin (execlib, dataSourceRegistry) {
   'use strict';
-  var BusyLogic = require('./busylogic')(execlib),
-    DataSourceBase = require('./basecreator')(execlib),
-    DataSourceSinkBase = require('./sinkbasecreator')(execlib, DataSourceBase),
-    DataSourceTaskBase = require('./taskbasecreator')(execlib, DataSourceSinkBase),
-    AllexState = require('./allexstatecreator')(execlib, DataSourceBase),
-    AllexHash2Array = require('./allexhash2arraycreator')(execlib, AllexState),
-    AllexDataQuery = require('./allexdataquerycreator')(execlib, DataSourceTaskBase, BusyLogic),
-    AllexDataPlusLevelDB = require('./allexdataplusleveldbcreator')(execlib, DataSourceTaskBase, BusyLogic),
-    AllexLevelDB = require('./allexleveldbcreator')(execlib, DataSourceTaskBase, BusyLogic),
-    AllexDataPlusData = require('./allexdataplusdatacreator.js')(execlib, DataSourceBase, BusyLogic),
-    JSData = require('./jsdatacreator')(execlib, DataSourceBase, BusyLogic),
-    AllexCommandDataWaiter = require('./allexcommanddatawaitercreator')(execlib, JSData);
 
-  return {
-    AllexLevelDB : AllexLevelDB,
-    AllexState: AllexState,
-    AllexHash2Array: AllexHash2Array,
-    AllexDataQuery: AllexDataQuery,
-    AllexDataPlusLevelDB : AllexDataPlusLevelDB,
-    AllexDataPlusData : AllexDataPlusData,
-    JSData: JSData,
-    AllexCommandDataWaiter: AllexCommandDataWaiter
+  var lib = execlib.lib;
+
+
+  function Hash2ArrayMixin (options) {
+    this.columnnames = options.columnnames;
+  }
+  Hash2ArrayMixin.prototype.destroy = function () {
+    this.columnnames = null;
   };
+  Hash2ArrayMixin.prototype.packHash2Array = function (hash) {
+    var ret = [], _r = ret;
+    lib.traverseShallow(hash, packer.bind(null, this.columnnames, _r));
+    _r = null;
+    return ret;
+  };
+  Hash2ArrayMixin.addMethods = function (klass) {
+    lib.inheritMethods(klass, Hash2ArrayMixin
+      ,'packHash2Array'
+    );
+  };
+
+  function packer (colnames, arry, thingy, pk) {
+    var record = [pk];
+    if (lib.isArray(colnames) && colnames.length) {
+      colnames.reduce(recordpacker.bind(null, thingy), record);
+    } else {
+      record.push(thingy);
+    }
+    arry.push(record);
+  }
+  function recordpacker (obj, result, itemname) {
+    if (obj && obj.hasOwnProperty && obj.hasOwnProperty(itemname)) {
+      result.push(obj[itemname]);
+    }
+    return result;
+  }
+
+  dataSourceRegistry.register('hash2arraymixin', Hash2ArrayMixin);
+}
+
+module.exports = createHash2ArrayMixin;
+
+},{}],16:[function(require,module,exports){
+function createDataSourceRegistry (execlib, DataSourceRegistry) {
+  'use strict';
+  var ret = new DataSourceRegistry();
+  require('./busylogic')(execlib, ret);
+  require('./hash2arraymixincreator')(execlib, ret);
+  require('./basecreator')(execlib, ret);
+  require('./localhash2arraycreator')(execlib, ret);
+  require('./jsdatacreator')(execlib, ret);
+  require('./allexcommanddatawaitercreator')(execlib, ret);
+  require('./sinkbasecreator')(execlib, ret);
+  require('./taskbasecreator')(execlib, ret);
+  require('./allexstatecreator')(execlib, ret);
+  require('./allexhash2arraycreator')(execlib, ret);
+  require('./allexdataquerycreator')(execlib, ret);
+  require('./allexdataplusleveldbcreator')(execlib, ret);
+  require('./allexleveldbcreator')(execlib, ret);
+  require('./allexdataplusdatacreator.js')(execlib, ret);
+
+  return ret;
 }
 
 module.exports = createDataSourceRegistry;
 
-},{"./allexcommanddatawaitercreator":5,"./allexdataplusdatacreator.js":6,"./allexdataplusleveldbcreator":7,"./allexdataquerycreator":8,"./allexhash2arraycreator":9,"./allexleveldbcreator":10,"./allexstatecreator":11,"./basecreator":12,"./busylogic":13,"./jsdatacreator":15,"./sinkbasecreator":16,"./taskbasecreator":17}],15:[function(require,module,exports){
-function createJSDataDataSource(execlib, DataSourceBase, BusyLogic) {
+},{"./allexcommanddatawaitercreator":6,"./allexdataplusdatacreator.js":7,"./allexdataplusleveldbcreator":8,"./allexdataquerycreator":9,"./allexhash2arraycreator":10,"./allexleveldbcreator":11,"./allexstatecreator":12,"./basecreator":13,"./busylogic":14,"./hash2arraymixincreator":15,"./jsdatacreator":17,"./localhash2arraycreator":18,"./sinkbasecreator":19,"./taskbasecreator":20}],17:[function(require,module,exports){
+function createJSDataDataSource(execlib, dataSourceRegistry) {
   'use strict';
 
-  var lib = execlib.lib;
+  var lib = execlib.lib,
+    DataSourceBase = dataSourceRegistry.get('.'),
+    BusyLogic = dataSourceRegistry.get('busylogic');
 
   function JSData (options) {
     DataSourceBase.call(this, options);
@@ -1921,7 +1781,10 @@ function createJSDataDataSource(execlib, DataSourceBase, BusyLogic) {
   }
   lib.inherit (JSData, DataSourceBase);
   JSData.prototype.destroy = function () {
-    this._bl.destroy();
+    if (this._bl) {
+      this._bl.destroy();
+    }
+    this._bl = null;
     this.data = null;
     DataSourceBase.prototype.destroy.call(this);
   };
@@ -1948,23 +1811,82 @@ function createJSDataDataSource(execlib, DataSourceBase, BusyLogic) {
     }
 
     if (this.data instanceof Object){
-      return lib.extend({}, this.data);
+      return lib.extend(lib.isArray(this.data) ? [] : {}, this.data);
     }
 
     return this.data;
   };
 
-  return JSData;
+  dataSourceRegistry.register('jsdata', JSData);
 }
 
 module.exports = createJSDataDataSource;
 
-},{}],16:[function(require,module,exports){
-function createDataSourceSinkBase (execlib, DataSourceBase) {
+},{}],18:[function(require,module,exports){
+function createLocalHash2Array (execlib, dataSourceRegistry) {
+  'use strict';
+
+  var lib = execlib.lib,
+    Hash2ArrayMixin = dataSourceRegistry.get('hash2arraymixin'),
+    DataSourceBase = dataSourceRegistry.get('.'),
+    BusyLogic = dataSourceRegistry.get('busylogic');
+
+  function LocalHash2Array (options) {
+    DataSourceBase.call(this, options);
+    Hash2ArrayMixin.call(this, options);
+    this._bl = new BusyLogic(this);
+    this.data = this.packHash2Array(options ? options.data : {});
+  }
+  lib.inherit(LocalHash2Array, DataSourceBase);
+  Hash2ArrayMixin.addMethods(LocalHash2Array);
+  LocalHash2Array.prototype.destroy = function () {
+    if (this._bl) {
+      this._bl.destroy();
+    }
+    this._bl = null;
+    this.data = null;
+    Hash2ArrayMixin.prototype.destroy.call(this);
+    DataSourceBase.prototype.destroy.call(this);
+  };
+  LocalHash2Array.prototype.setTarget = function (target) {
+    DataSourceBase.prototype.setTarget.call(this, target);
+    this._bl.setTarget(target);
+    this.setData();
+  };
+
+  LocalHash2Array.prototype.setData = function (data) {
+    if (arguments.length) {
+      this.data = this.packHash2Array(data);
+    }
+    if (!this.target) {
+      return;
+    }
+    this._bl.emitData();
+  };
+  LocalHash2Array.prototype.copyData = function () {
+    if (lib.isArray(this.data)) {
+      return this.data.slice();
+    }
+
+    if (this.data) {
+      throw new Error('data of an instance of '+this.constructor.name+' has to be an array');
+    }
+
+    return this.data;
+  };
+
+  dataSourceRegistry.register('localhash2array', LocalHash2Array);
+}
+
+module.exports = createLocalHash2Array;
+
+},{}],19:[function(require,module,exports){
+function createDataSourceSinkBase (execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib,
     q = lib.q,
+    DataSourceBase = dataSourceRegistry.get('.'),
     cnt = 0;
 
   function DataSourceSinkBase (sink, options){
@@ -2054,18 +1976,19 @@ function createDataSourceSinkBase (execlib, DataSourceBase) {
     if (!this._should_stop) this.start();
   };
 
-  return DataSourceSinkBase;
+  dataSourceRegistry.register('sinkbase', DataSourceSinkBase);
 }
 
 module.exports = createDataSourceSinkBase;
 
 
-},{}],17:[function(require,module,exports){
-function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
+},{}],20:[function(require,module,exports){
+function createDataSourceTaskBase (execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib,
-    q = lib.q;
+    q = lib.q,
+    DataSourceSinkBase = dataSourceRegistry.get('sinkbase');
 
   function DataSourceTaskBase (tasksink, options){
     DataSourceSinkBase.call(this, tasksink, options);
@@ -2145,24 +2068,29 @@ function createDataSourceTaskBase (execlib, DataSourceSinkBase) {
     return DataSourceSinkBase.prototype.setFilter.call(this, filter);
   };
 
-  return DataSourceTaskBase;
+  dataSourceRegistry.register('taskbase', DataSourceTaskBase);
 }
 
 module.exports = createDataSourceTaskBase;
 
 
-},{}],18:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 (function (global){
-function createLib (execlib) {
-  return execlib.loadDependencies('client', ['allex_leveldblib', 'allex_userrepresentationlib'], createEnvironmentFactory.bind(null, execlib));
-}
-
 function createEnvironmentFactory (execlib, leveldblib, UserRepresentation) {
   'use strict';
-  var dataSourceRegistry = require('./datasources')(execlib),
-    EnvironmentBase = require('./basecreator')(execlib, leveldblib),
-    AllexEnvironment = require('./allexcreator')(execlib, dataSourceRegistry, EnvironmentBase),
-    AllexRemoteEnvironment = require('./allexremotecreator')(execlib, dataSourceRegistry, AllexEnvironment, UserRepresentation);
+  var lib = execlib.lib,
+    CommandBase = require('./commandbasecreator')(lib),
+    registries = require('./registrycreator')(lib),
+    DataSourceRegistry = registries.DataSourceRegistry,
+    EnvironmentRegistry = registries.EnvironmentRegistry,
+    dataSourceRegistry = require('./datasources')(execlib, DataSourceRegistry),
+    environmentRegistry = new EnvironmentRegistry();
+
+  
+  require('./basecreator')(execlib, leveldblib, dataSourceRegistry, environmentRegistry),
+  require('./allexcreator')(execlib, environmentRegistry, CommandBase),
+  require('./allexremotecreator')(execlib, environmentRegistry, UserRepresentation, CommandBase);
+
 
   function createFromConstructor (ctor, options) {
     if (lib.isFunction (ctor)) return new ctor (options);
@@ -2177,17 +2105,621 @@ function createEnvironmentFactory (execlib, leveldblib, UserRepresentation) {
   }
 
   function environmentFactory (desc) {
+    /*
     switch (desc.type) {
       case 'allexremote' : return new AllexRemoteEnvironment (desc.options);
       case 'fromctor' : return createFromConstructor(desc.options.ctor, desc.options.options);
       default : throw new Error('Environment type '+desc.type+' not supported');
     }
+    */
+    if (desc.type === 'fromctor') {
+      return createFromConstructor(desc.options.ctor, desc.options.options);
+    }
+
+    return new (environmentRegistry.get(desc.type))(desc.options);
   }
+  environmentFactory.dataSourceRegistry = dataSourceRegistry;
+  environmentFactory.environmentRegistry = environmentRegistry;
+  environmentFactory.CommandBase = CommandBase;
 
   return environmentFactory;
 }
 
-module.exports = createLib;
+module.exports = createEnvironmentFactory;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./allexcreator":2,"./allexremotecreator":3,"./basecreator":4,"./datasources":14}]},{},[1]);
+},{"./allexcreator":2,"./allexremotecreator":3,"./basecreator":4,"./commandbasecreator":5,"./datasources":16,"./registrycreator":22}],22:[function(require,module,exports){
+function createRegistries (lib) {
+  'use strict';
+
+  var Map = lib.Map;
+
+  function RegistryBase () {
+    Map.call(this);
+  }
+  lib.inherit(RegistryBase, Map);
+  RegistryBase.prototype.get = function (name) {
+    var ret = Map.prototype.get.call(this, name);
+    if (!lib.isFunction(ret)) {
+      throw new Error(this.TypeName+' '+name+' is not registered');
+    }
+    return ret;
+  };
+  RegistryBase.prototype.register = function (name, ctor) {
+    var typecheck, check;
+    if (!lib.isFunction(ctor)) {
+      throw new Error ('Cannot register a constructor under '+name+' if it is not a function');
+    }
+    try { check = this.get(name); } catch(ignore) {}
+    if (check) {
+      console.error(name, 'is already registered', check);
+      throw new Error(this.TypeName+' '+name+' is already registered');
+    }
+    this.add(name, ctor);
+  };
+
+  function DataSourceRegistry () {
+    RegistryBase.call(this);
+  }
+  lib.inherit(DataSourceRegistry, RegistryBase);
+  DataSourceRegistry.prototype.TypeName = 'DataSource';
+
+  function EnvironmentRegistry () {
+    RegistryBase.call(this);
+  }
+  lib.inherit(EnvironmentRegistry, RegistryBase);
+  EnvironmentRegistry.prototype.TypeName = 'Environment';
+
+  return {
+    DataSourceRegistry: DataSourceRegistry,
+    EnvironmentRegistry: EnvironmentRegistry
+  };
+}
+
+module.exports = createRegistries;
+
+},{}],23:[function(require,module,exports){
+function createAcquireSinkOnHotelJob (execlib, mylib) {
+  'use strict';
+
+  var lib = execlib.lib,
+    q = lib.q,
+    qlib = lib.qlib,
+    JobOnEnvironment = mylib.JobOnEnvironment;
+
+  function AcquireSinkOnHotelJob (env, protocolsecurer, params, defer) {
+    JobOnEnvironment.call(this, env, defer);
+    this.protocolsecurer = protocolsecurer;
+    this.params = params;
+    this.task = null;
+  }
+  lib.inherit(AcquireSinkOnHotelJob, JobOnEnvironment);
+  AcquireSinkOnHotelJob.prototype.destroy = function () {
+    if (this.task) {
+      this.task.destroy();
+    }
+    this.task = null;
+    this.params = null;
+    this.protocolsecurer = null;
+    JobOnEnvironment.prototype.destroy.call(this);
+  };
+  AcquireSinkOnHotelJob.prototype.go = function () {
+    var ok = this.okToGo();
+    if (!ok.ok) {
+      return ok.val;
+    }
+    this.doDaAcquire();
+    return ok.val;
+  };
+  AcquireSinkOnHotelJob.prototype.doDaAcquire = function () {
+    var protocol = this.protocolsecurer('ws');
+    if (this.task) {
+      this.task.destroy();
+    }
+
+    this.task = execlib.execSuite.taskRegistry.run('acquireSink', {
+      connectionString: protocol+'://'+this.params.ipaddress+':'+this.params.port,
+      session: this.params.session,
+      onSink: this.resolve.bind(this),
+      onCannotConnect : this.reject.bind(this),
+      onConnectionLost: this.reject.bind(this),
+      singleshot: true
+    });
+  };
+
+  mylib.AcquireSinkOnHotelJob = AcquireSinkOnHotelJob;
+}
+module.exports = createAcquireSinkOnHotelJob;
+
+},{}],24:[function(require,module,exports){
+function createAcquireUserSinkJob (execlib, mylib) {
+  'use strict';
+
+  var lib = execlib.lib,
+    q = lib.q,
+    qlib = lib.qlib,
+    JobOnEnvironment = mylib.JobOnEnvironment;
+
+  function AcquireUserSinkJob (env, hotelsink, defer) {
+    JobOnEnvironment.call(this, env, defer);
+    this.hotelsink = hotelsink;
+    this.task = null;
+  }
+  lib.inherit(AcquireUserSinkJob, JobOnEnvironment);
+  AcquireUserSinkJob.prototype.destroy = function () {
+    if (this.task) {
+      this.task.destroy();
+    }
+    this.task = null;
+    this.hotelsink = null;
+    JobOnEnvironment.prototype.destroy.call(this);
+  };
+  AcquireUserSinkJob.prototype.go = function () {
+    var ok = this.okToGo();
+    if (!ok.ok) {
+      return ok.val;
+    }
+    this.doDaAcquire();
+    return ok.val;
+  };
+  AcquireUserSinkJob.prototype.doDaAcquire = function () {
+    if (!this.okToProceed()) {
+      return;
+    }
+    if (this.task) {
+      this.task.destroy();
+    }
+    //will not report errors
+    this.task = execlib.execSuite.taskRegistry.run('acquireUserServiceSink', {
+      sink: this.hotelsink,
+      cb: this.resolve.bind(this)
+    });
+  };
+
+  mylib.AcquireUserSinkJob = AcquireUserSinkJob;
+}
+module.exports = createAcquireUserSinkJob;
+
+},{}],25:[function(require,module,exports){
+function createCheckSessionJob (lib, mylib) {
+  'use strict';
+  var q = lib.q,
+    qlib = lib.qlib,
+    JobOnEnvironment = mylib.JobOnEnvironment;
+
+  function CheckSessionJob (env, remotestoragename, defer) {
+    JobOnEnvironment.call(this, env, defer);
+    this.remotestoragename = remotestoragename;
+  }
+  lib.inherit(CheckSessionJob, JobOnEnvironment);
+  CheckSessionJob.prototype.destroy = function () {
+    this.remotestoragename = null;
+    JobOnEnvironment.prototype.destroy.call(this);
+  };
+  CheckSessionJob.prototype.go = function () {
+    var ok = this.okToGo();
+    if (!ok.ok) {
+      return ok.val;
+    }
+    this.destroyable.set('state', 'pending');
+    this.destroyable.getFromStorage(this.remotestoragename, 'sessionid').then(
+      this.onSessionId.bind(this),
+      this.onGetSessionIDFromStorageFailed.bind(this)
+    );
+    return ok.val;
+  };
+  CheckSessionJob.prototype.onSessionId = function (sessionid) {
+    if (!this.okToProceed()) {
+      return;
+    }
+    this.destroyable.sessionid = sessionid;
+    if (!sessionid) {
+      this.onGetSessionIDFromStorageFailed();
+      return;
+    }
+    this.resolve(sessionid);
+  };
+  CheckSessionJob.prototype.onGetSessionIDFromStorageFailed = function () {
+    if (!this.okToProceed()) {
+      return;
+    }
+    this.destroyable.set('state', 'loggedout');
+    this.reject(new lib.Error('NO_SESSION_ID'));
+  };
+
+  mylib.CheckSessionJob = CheckSessionJob;
+}
+module.exports = createCheckSessionJob;
+
+},{}],26:[function(require,module,exports){
+function createRemoteJobs (execlib, mixins) {
+  'use strict';
+
+  var ret = {};
+  require('./onenvironmentcreator')(execlib.lib, ret);
+  require('./checksessioncreator')(execlib.lib, ret);
+  require('./letmeincreator')(execlib, ret);
+  require('./logincreator')(execlib.lib, mixins, ret);
+  require('./acquiresinkonhotelcreator')(execlib, ret);
+  require('./acquireusersinkcreator')(execlib, ret);
+
+  return ret;
+}
+module.exports = createRemoteJobs;
+
+},{"./acquiresinkonhotelcreator":23,"./acquireusersinkcreator":24,"./checksessioncreator":25,"./letmeincreator":27,"./logincreator":28,"./onenvironmentcreator":29}],27:[function(require,module,exports){
+function createLetMeInJob (execlib, mylib) {
+  'use strict';
+
+  var lib = execlib.lib,
+    q = lib.q,
+    qlib = lib.qlib,
+    JobOnEnvironment = mylib.JobOnEnvironment;
+
+  function LetMeInJob (env, protocolsecurer, heartbeat, credentials, entrypointmethod, defer) {
+    JobOnEnvironment.call(this, env, defer);
+    this.protocolsecurer = protocolsecurer;
+    this.heartbeat = heartbeat;
+    this.credentials = credentials;
+    this.entrypointmethod = entrypointmethod;
+  }
+  lib.inherit(LetMeInJob, JobOnEnvironment);
+  LetMeInJob.prototype.destroy = function () {
+    this.entrypointmethod = null;
+    this.credentials = null;
+    this.heartbeat = null;
+    this.protocolsecurer = null;
+    JobOnEnvironment.prototype.destroy.call(this);
+  };
+  LetMeInJob.prototype.go = function () {
+    var ok = this.okToGo();
+    if (!ok.ok) {
+      return ok.val;
+    }
+    if (!this.credentials) {
+      this.reject(new lib.Error('CANNOT_LOGIN', 'Cannot login without credentials'));
+      return ok.val;
+    }
+    this.destroyable.recreateUserRepresentation();
+    execlib.loadDependencies('client', [
+      '.',
+      'allex:hotel'
+    ], qlib.executor(this.sendLetMeInRequest.bind(this)));
+    return ok.val;
+  };
+  LetMeInJob.prototype.sendLetMeInRequest = function () {
+    if (!this.okToProceed()) {
+      return;
+    }
+    lib.request(this.protocolsecurer('http')+'://'+this.destroyable.address+':'+this.destroyable.port+'/'+ (this.entrypointmethod || 'letMeIn'), {
+      parameters: this.credentials,
+      onComplete: this.onLetMeInResponse.bind(this),
+      onError: this.reject.bind(this)
+    });
+    lib.runNext(this.onStale.bind(this), 10*this.heartbeat);
+  };
+  LetMeInJob.prototype.onLetMeInResponse = function (response) {
+    if (!this.okToProceed()) {
+      return;
+    }
+    if (!response) {
+      this.resolve(null);
+      return;
+    }
+    if ('data' in response) {
+      this.parseAndResolve(response.data);
+      return;
+    }
+    if ('response' in response) {
+      this.parseAndResolve(response.response);
+      return;
+    }
+    this.resolve(response);
+  };
+  LetMeInJob.prototype.parseAndResolve = function (response) {
+    try {
+      this.resolve(JSON.parse(response));
+    } catch (e) {
+      console.error('problem with', response);
+      console.error(e);
+      this.reject(e);
+    }
+  };
+  LetMeInJob.prototype.onStale = function () {
+    this.reject(new lib.Error('STALE_LET_ME_IN_REQUEST', 'Stale request'));
+  };
+
+  mylib.LetMeInJob = LetMeInJob;
+}
+module.exports = createLetMeInJob;
+
+},{}],28:[function(require,module,exports){
+function createLoginJob (lib, mixins, mylib) {
+  'use strict';
+
+  var q = lib.q,
+    qlib = lib.qlib,
+    JobOnEnvironment = mylib.JobOnEnvironment,
+    HotelAndApartmentHandlerMixin = mixins.HotelAndApartmentHandlerMixin;
+
+  function LoginJob (env, remotestoragename, protocolsecurer, heartbeat, credentials, entrypointmethod, defer) {
+    JobOnEnvironment.call(this, env, defer);
+    HotelAndApartmentHandlerMixin.call(this);
+    this.sinksreported = false;
+    this.remotestoragename = remotestoragename;
+    this.protocolsecurer = protocolsecurer;
+    this.heartbeat = heartbeat;
+    this.credentials = credentials;
+    this.entrypointmethod = entrypointmethod;
+    this.letmeinresponse = null;
+  }
+  lib.inherit(LoginJob, JobOnEnvironment);
+  HotelAndApartmentHandlerMixin.addMethods(LoginJob);
+  LoginJob.prototype.destroy = function () {
+    var sr = this.sinksreported,
+      hs = this.hotelSink,
+      as = this.apartmentSink;
+    this.letmeinresponse = null;
+    this.entrypointmethod = null;
+    this.credentials = null;
+    this.heartbeat = null;
+    this.protocolsecurer = null;
+    this.remotestoragename = null;
+    this.sinksreported = null;
+    HotelAndApartmentHandlerMixin.prototype.destroy.call(this);
+    JobOnEnvironment.prototype.destroy.call(this);
+    if (!sr) {
+      if (hs) {
+        hs.destroy();
+      }
+      if (as) {
+        as.destroy();
+      }
+    }
+  };
+  LoginJob.prototype.go = function () {
+    var ok = this.okToGo();
+    if (!ok.ok) {
+      return ok.val;
+    }
+    if (this.destroyable.apartmentSink && this.destroyable.apartmentSink.destroyed) {
+      this.resolve(true);
+    } else {
+      this.doDaLetMeIn();
+    }
+    return ok.val;
+  };
+  LoginJob.prototype.doDaLetMeIn = function () {
+    this.letmeinresponse = null;
+    HotelAndApartmentHandlerMixin.prototype.destroy.call(this);
+    (new mylib.LetMeInJob(
+      this.destroyable,
+      this.protocolsecurer,
+      this.heartbeat,
+      this.credentials,
+      this.entrypointmethod
+    )).go().then(
+      this.onLetMeInResponse.bind(this),
+      this.onLetMeInRequestFail.bind(this)
+    );
+  };
+  LoginJob.prototype.onLetMeInResponse = function (response) {
+    if (!this.okToProceed()) {
+      return;
+    }
+    if (!response) {
+      this.destroyable.giveUp(this.credentials, this);
+      return;
+    }
+    if (response) {
+      if (response.error) {
+        console.log('response.error', response.error);
+        if (response.error==='NO_TARGETS_YET' || response.error==='NO_DB_YET') {
+          lib.runNext(this.doDaLetMeIn.bind(this), this.heartbeat*10);
+          //this.reject(response.error);
+          return;
+        }
+      }
+      if (response.secondphase) {
+        this.destroyable.secondphasesessionid = response.secondphase;
+        this.destroyable.delFromStorage(remoteStorageName, 'sessionid').then (
+          this.resolve.bind(this, this.destroyable.set('state', 'secondphase')) //yes, 'state' is set immediately
+        );
+        return;
+      }
+      if (!(response.ipaddress && response.port && response.session)) {
+        this.destroyable.giveUp(this.credentials, this);
+        return;
+      }
+      this.letmeinresponse = response;
+      this.acquireSinkOnHotel();
+      return;
+    }
+    this.destroyable.giveUp(this.credentials, this);
+  };
+  LoginJob.prototype.onLetMeInRequestFail = function (reason) {
+    if (!this.okToProceed()) {
+      return;
+    }
+    lib.runNext(this.doDaLetMeIn.bind(this), this.heartbeat*10);
+    /*
+    if (reason && 'STALE_LET_ME_IN_REQUEST' === reason.code) {
+      this.doDaLetMeIn();
+      return;
+    }
+    this.destroyable.set('error', reason);
+    this.destroyable.giveUp(this.credentials, this);
+    */
+  };
+  LoginJob.prototype.acquireSinkOnHotel = function () {
+    if (!this.okToProceed()) {
+      return;
+    }
+    (new mylib.AcquireSinkOnHotelJob(this.destroyable, this.protocolsecurer, this.letmeinresponse)).go().then(
+      this.onHotelSink.bind(this),
+      this.onHotelSinkFail.bind(this)
+    );
+  };
+  LoginJob.prototype.onHotelSink = function (hotelsink) {
+    if (!this.okToProceed()) {
+      if (hotelsink) {
+        hotelsink.destroy();
+      }
+      return;
+    }
+    this.purgeHotelSinkDestroyedListener();
+    if (!(hotelsink && hotelsink.destroyed)) {
+      this.acquireSinkOnHotel();
+      return;
+    }
+    HotelAndApartmentHandlerMixin.prototype.setHotelSink.call(this, hotelsink);
+    this.acquireApartmentServiceSink();
+  };
+  LoginJob.prototype.onHotelSinkFail = function (reason) {
+    this.doDaLetMeIn();
+  };
+  LoginJob.prototype.onHotelSinkDestroyed = function () {
+    HotelAndApartmentHandlerMixin.prototype.onHotelSinkDestroyed.call(this);
+    this.acquireSinkOnHotel();
+  };
+  LoginJob.prototype.acquireApartmentServiceSink = function () {
+    if (!this.okToProceed()) {
+      return;
+    }
+    (new mylib.AcquireUserSinkJob(this.destroyable, this.hotelSink)).go().then(
+      this.onApartmentSink.bind(this),
+      this.reject.bind(this)
+    );
+  };
+  LoginJob.prototype.onApartmentSink = function (usersink) {
+    if (!this.okToProceed()) {
+      if (usersink) {
+        usersink.destroy();
+      }
+      return;
+    }
+    if (!(usersink && usersink.destroyed)) {
+      this.acquireApartmentServiceSink();
+      return;
+    }
+    HotelAndApartmentHandlerMixin.prototype.setApartmentSink.call(this, usersink);
+    this.destroyable.putToStorage(this.remotestoragename, 'sessionid', {sessionid: this.letmeinresponse.session, token: lib.uid()}).then(
+      this.onSessionSaved.bind(this),
+      this.onSessionSaveFailed.bind(this)
+    );
+  };
+  LoginJob.prototype.onSessionSaved = function (ok) {
+    if (!this.okToProceed()) {
+      return;
+    }
+    this.destroyable.sessionid = this.letmeinresponse.session;
+    this.destroyable.setApartmentSink(this.apartmentSink);
+    this.sinksreported = true;
+    this.resolve(true);
+  };
+  LoginJob.prototype.onSessionSaveFailed = function (reason) {
+    if (!this.okToProceed()) {
+      return;
+    }
+  };
+
+  mylib.LoginJob = LoginJob;
+}
+module.exports = createLoginJob;
+
+},{}],29:[function(require,module,exports){
+function createJobOnEnvironment (lib, mylib) {
+  'use strict';
+  var q = lib.q,
+    qlib = lib.qlib,
+    JobOnDestroyableBase = qlib.JobOnDestroyableBase;
+
+  function JobOnEnvironment (env, defer) {
+    JobOnDestroyableBase.call(this, env, defer);
+  }
+  lib.inherit(JobOnEnvironment, JobOnDestroyableBase);
+  JobOnEnvironment.prototype._destroyableOk = function () {
+    return (this.destroyable && this.destroyable.jobs);
+  };
+
+  mylib.JobOnEnvironment = JobOnEnvironment;
+}
+module.exports = createJobOnEnvironment;
+
+},{}],30:[function(require,module,exports){
+function createHotelAndApartmentSinkHandlerMixin (lib) {
+  'use strict';
+
+  function HotelAndApartmentHandlerMixin () {
+    this.hotelSinkDestroyedListener = null;
+    this.hotelSink = null;
+    this.apartmentSinkDestroyedListener = null;
+    this.apartmentSink = null;
+  }
+  HotelAndApartmentHandlerMixin.prototype.destroy = function () {
+    this.apartmentSink = null;
+    this.purgeApartmentSinkDestroyedListener();
+    this.hotelSink = null;
+    this.purgeHotelSinkDestroyedListener();
+  };
+  HotelAndApartmentHandlerMixin.prototype.purgeHotelSinkDestroyedListener = function () {
+    if (this.hotelSinkDestroyedListener) {
+      this.hotelSinkDestroyedListener.destroy();
+    }
+    this.hotelSinkDestroyedListener = null;
+  };
+  HotelAndApartmentHandlerMixin.prototype.purgeApartmentSinkDestroyedListener = function () {
+    if (this.apartmentSinkDestroyedListener) {
+      this.apartmentSinkDestroyedListener.destroy();
+    }
+    this.apartmentSinkDestroyedListener = null;
+  };
+  HotelAndApartmentHandlerMixin.prototype.setHotelSink = function (hotelsink) {
+    this.hotelSinkDestroyedListener = hotelsink.destroyed.attach(this.onHotelSinkDestroyed.bind(this));
+    this.hotelSink = hotelsink;
+  };
+  HotelAndApartmentHandlerMixin.prototype.setApartmentSink = function (apartmentsink) {
+    this.purgeApartmentSinkDestroyedListener();
+    this.apartmentSinkDestroyedListener = apartmentsink.destroyed.attach(this.onApartmentSinkDestroyed.bind(this));
+    this.apartmentSink = apartmentsink;
+  };
+  HotelAndApartmentHandlerMixin.prototype.onHotelSinkDestroyed = function () {
+    this.hotelSink = null;
+    this.purgeHotelSinkDestroyedListener();
+  };
+  HotelAndApartmentHandlerMixin.prototype.onApartmentSinkDestroyed = function () {
+    this.apartmentSink = null;
+    this.purgeApartmentSinkDestroyedListener();
+    /* not needed, acquireUserServiceSink already connected this
+    if (this.hotelSink) {
+      this.hotelSink.destroy();
+    }
+    */
+  };
+
+  HotelAndApartmentHandlerMixin.addMethods = function (klass) {
+    lib.inheritMethods(klass, HotelAndApartmentHandlerMixin
+      ,'purgeHotelSinkDestroyedListener'
+      ,'purgeApartmentSinkDestroyedListener'
+      ,'setHotelSink'
+      ,'setApartmentSink'
+      ,'onHotelSinkDestroyed'
+      ,'onApartmentSinkDestroyed'
+    );
+  }
+
+  return HotelAndApartmentHandlerMixin;
+}
+module.exports = createHotelAndApartmentSinkHandlerMixin;
+
+},{}],31:[function(require,module,exports){
+function createMixins (lib) {
+  'use strict';
+
+  return {
+    HotelAndApartmentHandlerMixin: require('./hotelandapartmentsinkhandlercreator')(lib)
+  };
+}
+module.exports = createMixins;
+
+},{"./hotelandapartmentsinkhandlercreator":30}]},{},[1]);

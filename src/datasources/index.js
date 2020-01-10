@@ -1,28 +1,22 @@
-function createDataSourceRegistry (execlib) {
+function createDataSourceRegistry (execlib, DataSourceRegistry) {
   'use strict';
-  var BusyLogic = require('./busylogic')(execlib),
-    DataSourceBase = require('./basecreator')(execlib),
-    DataSourceSinkBase = require('./sinkbasecreator')(execlib, DataSourceBase),
-    DataSourceTaskBase = require('./taskbasecreator')(execlib, DataSourceSinkBase),
-    AllexState = require('./allexstatecreator')(execlib, DataSourceBase),
-    AllexHash2Array = require('./allexhash2arraycreator')(execlib, AllexState),
-    AllexDataQuery = require('./allexdataquerycreator')(execlib, DataSourceTaskBase, BusyLogic),
-    AllexDataPlusLevelDB = require('./allexdataplusleveldbcreator')(execlib, DataSourceTaskBase, BusyLogic),
-    AllexLevelDB = require('./allexleveldbcreator')(execlib, DataSourceTaskBase, BusyLogic),
-    AllexDataPlusData = require('./allexdataplusdatacreator.js')(execlib, DataSourceBase, BusyLogic),
-    JSData = require('./jsdatacreator')(execlib, DataSourceBase, BusyLogic),
-    AllexCommandDataWaiter = require('./allexcommanddatawaitercreator')(execlib, JSData);
+  var ret = new DataSourceRegistry();
+  require('./busylogic')(execlib, ret);
+  require('./hash2arraymixincreator')(execlib, ret);
+  require('./basecreator')(execlib, ret);
+  require('./localhash2arraycreator')(execlib, ret);
+  require('./jsdatacreator')(execlib, ret);
+  require('./allexcommanddatawaitercreator')(execlib, ret);
+  require('./sinkbasecreator')(execlib, ret);
+  require('./taskbasecreator')(execlib, ret);
+  require('./allexstatecreator')(execlib, ret);
+  require('./allexhash2arraycreator')(execlib, ret);
+  require('./allexdataquerycreator')(execlib, ret);
+  require('./allexdataplusleveldbcreator')(execlib, ret);
+  require('./allexleveldbcreator')(execlib, ret);
+  require('./allexdataplusdatacreator.js')(execlib, ret);
 
-  return {
-    AllexLevelDB : AllexLevelDB,
-    AllexState: AllexState,
-    AllexHash2Array: AllexHash2Array,
-    AllexDataQuery: AllexDataQuery,
-    AllexDataPlusLevelDB : AllexDataPlusLevelDB,
-    AllexDataPlusData : AllexDataPlusData,
-    JSData: JSData,
-    AllexCommandDataWaiter: AllexCommandDataWaiter
-  };
+  return ret;
 }
 
 module.exports = createDataSourceRegistry;

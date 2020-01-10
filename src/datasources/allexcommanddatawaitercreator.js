@@ -1,7 +1,8 @@
-function createAllexCommandDataWaiter(execlib, JSData) {
+function createAllexCommandDataWaiter(execlib, dataSourceRegistry) {
   'use strict';
 
-  var lib = execlib.lib;
+  var lib = execlib.lib,
+    JSData = dataSourceRegistry.get('jsdata');
 
   function AllexCommandDataWaiter (options) {
     options.data = [];
@@ -16,7 +17,7 @@ function createAllexCommandDataWaiter(execlib, JSData) {
     this.setData();
   };
 
-  return AllexCommandDataWaiter;
+  dataSourceRegistry.register('commandwaiter', AllexCommandDataWaiter);
 }
 
 module.exports = createAllexCommandDataWaiter;

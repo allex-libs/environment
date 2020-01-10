@@ -1,8 +1,10 @@
-function createAllexLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
+function createAllexLevelDBDataSource(execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib,
     taskRegistry = execlib.execSuite.taskRegistry,
+    DataSourceTaskBase = dataSourceRegistry.get('taskbase'),
+    BusyLogic = dataSourceRegistry.get('busylogic'),
     q = lib.q,
     COMMANDS = {
       'data' : {
@@ -40,6 +42,7 @@ function createAllexLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
     this.data = null;
     DataSourceTaskBase.prototype.destroy.call(this);
   };
+  AllexLevelDB.IsSingleSink = true;
 
   AllexLevelDB.prototype._resetData = function () {
     var init = COMMANDS[this.command_type].init;
@@ -130,7 +133,7 @@ function createAllexLevelDBDataSource(execlib, DataSourceTaskBase, BusyLogic) {
     throw new Error('Unknow hook type', this.command_type);
   };
 
-  return AllexLevelDB;
+  dataSourceRegistry.register('allexleveldb', AllexLevelDB);
 }
 
 module.exports = createAllexLevelDBDataSource;

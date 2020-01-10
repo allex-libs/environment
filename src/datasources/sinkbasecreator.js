@@ -1,8 +1,9 @@
-function createDataSourceSinkBase (execlib, DataSourceBase) {
+function createDataSourceSinkBase (execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib,
     q = lib.q,
+    DataSourceBase = dataSourceRegistry.get('.'),
     cnt = 0;
 
   function DataSourceSinkBase (sink, options){
@@ -92,7 +93,7 @@ function createDataSourceSinkBase (execlib, DataSourceBase) {
     if (!this._should_stop) this.start();
   };
 
-  return DataSourceSinkBase;
+  dataSourceRegistry.register('sinkbase', DataSourceSinkBase);
 }
 
 module.exports = createDataSourceSinkBase;
