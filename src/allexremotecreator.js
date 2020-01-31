@@ -192,7 +192,6 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
   lib.inherit(AllexRemoteEnvironment, AllexEnvironment);
   HotelAndApartmentHandlerMixin.addMethods(AllexRemoteEnvironment);
   AllexRemoteEnvironment.prototype.destroy = function () {
-    var as = this.apartmentSink;
     if (this.jobs) {
       this.jobs.destroy();
     }
@@ -205,11 +204,9 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     this.userRepresentation = null;
     this.port = null;
     this.address = null;
+    HotelAndApartmentHandlerMixin.prototype.purgeBothListenersAndSinks();
     HotelAndApartmentHandlerMixin.prototype.destroy.call(this);
     AllexEnvironment.prototype.destroy.call(this);
-    if (as) {
-      as.destroy(); //will trigger destroy on hotelSink
-    }
   };
   AllexRemoteEnvironment.prototype.setApartmentSink = function (sink) {
     this.recreateUserRepresentation();

@@ -47,6 +47,18 @@ function createHotelAndApartmentSinkHandlerMixin (lib) {
     }
     */
   };
+  HotelAndApartmentHandlerMixin.prototype.purgeBothListenersAndSinks = function () {
+    this.purgeApartmentSinkDestroyedListener();
+    this.purgeHotelSinkDestroyedListener();
+    if (this.apartmentSink) {
+      this.apartmentSink.destroy();
+    }
+    this.apartmentSink = null;
+    if (this.hotelSink && this.hotelSink.destroyed) {
+      this.hotelSink.destroy();
+    }
+    this.hotelSink = null;
+  };
 
   HotelAndApartmentHandlerMixin.addMethods = function (klass) {
     lib.inheritMethods(klass, HotelAndApartmentHandlerMixin
@@ -56,6 +68,7 @@ function createHotelAndApartmentSinkHandlerMixin (lib) {
       ,'setApartmentSink'
       ,'onHotelSinkDestroyed'
       ,'onApartmentSinkDestroyed'
+      ,'purgeBothListenersAndSinks'
     );
   }
 

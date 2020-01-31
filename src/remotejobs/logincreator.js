@@ -20,9 +20,9 @@ function createLoginJob (lib, mixins, mylib) {
   lib.inherit(LoginJob, JobOnEnvironment);
   HotelAndApartmentHandlerMixin.addMethods(LoginJob);
   LoginJob.prototype.destroy = function () {
-    var sr = this.sinksreported,
-      hs = this.hotelSink,
-      as = this.apartmentSink;
+    if (!this.sinksreported) {
+      HotelAndApartmentHandlerMixin.prototype.purgeBothListenersAndSinks();
+    }
     this.letmeinresponse = null;
     this.entrypointmethod = null;
     this.credentials = null;
@@ -32,14 +32,6 @@ function createLoginJob (lib, mixins, mylib) {
     this.sinksreported = null;
     HotelAndApartmentHandlerMixin.prototype.destroy.call(this);
     JobOnEnvironment.prototype.destroy.call(this);
-    if (!sr) {
-      if (hs) {
-        hs.destroy();
-      }
-      if (as) {
-        as.destroy();
-      }
-    }
   };
   LoginJob.prototype.go = function () {
     var ok = this.okToGo();
@@ -55,7 +47,7 @@ function createLoginJob (lib, mixins, mylib) {
   };
   LoginJob.prototype.doDaLetMeIn = function () {
     this.letmeinresponse = null;
-    HotelAndApartmentHandlerMixin.prototype.destroy.call(this);
+    HotelAndApartmentHandlerMixin.prototype.purgeBothListenersAndSinks.call(this);
     (new mylib.LetMeInJob(
       this.destroyable,
       this.protocolsecurer,
@@ -140,6 +132,11 @@ function createLoginJob (lib, mixins, mylib) {
     this.acquireApartmentServiceSink();
   };
   LoginJob.prototype.onHotelSinkFail = function (reason) {
+    console.warn('Could not acquire sink on Hotel', reason);
+    if (reason && reason.code === 'CLIENT_SHOULD_FORGET') {
+      this.reject(reason);
+      return;
+    }
     this.doDaLetMeIn();
   };
   LoginJob.prototype.onHotelSinkDestroyed = function () {
@@ -173,7 +170,8 @@ function createLoginJob (lib, mixins, mylib) {
     );
   };
   LoginJob.prototype.onApartmentSinkFail = function (reason) {
-    this.acquireApartmentServiceSink();
+    console.warn('Could not acquire Apartment sink on Hotel', reason);
+    this.doDaLetMeIn();
   };
   LoginJob.prototype.onSessionSaved = function (ok) {
     if (!this.okToProceed()) {

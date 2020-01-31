@@ -327,7 +327,6 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
   lib.inherit(AllexRemoteEnvironment, AllexEnvironment);
   HotelAndApartmentHandlerMixin.addMethods(AllexRemoteEnvironment);
   AllexRemoteEnvironment.prototype.destroy = function () {
-    var as = this.apartmentSink;
     if (this.jobs) {
       this.jobs.destroy();
     }
@@ -340,11 +339,9 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     this.userRepresentation = null;
     this.port = null;
     this.address = null;
+    HotelAndApartmentHandlerMixin.prototype.purgeBothListenersAndSinks();
     HotelAndApartmentHandlerMixin.prototype.destroy.call(this);
     AllexEnvironment.prototype.destroy.call(this);
-    if (as) {
-      as.destroy(); //will trigger destroy on hotelSink
-    }
   };
   AllexRemoteEnvironment.prototype.setApartmentSink = function (sink) {
     this.recreateUserRepresentation();
@@ -2456,9 +2453,9 @@ function createLoginJob (lib, mixins, mylib) {
   lib.inherit(LoginJob, JobOnEnvironment);
   HotelAndApartmentHandlerMixin.addMethods(LoginJob);
   LoginJob.prototype.destroy = function () {
-    var sr = this.sinksreported,
-      hs = this.hotelSink,
-      as = this.apartmentSink;
+    if (!this.sinksreported) {
+      HotelAndApartmentHandlerMixin.prototype.purgeBothListenersAndSinks();
+    }
     this.letmeinresponse = null;
     this.entrypointmethod = null;
     this.credentials = null;
@@ -2468,14 +2465,6 @@ function createLoginJob (lib, mixins, mylib) {
     this.sinksreported = null;
     HotelAndApartmentHandlerMixin.prototype.destroy.call(this);
     JobOnEnvironment.prototype.destroy.call(this);
-    if (!sr) {
-      if (hs) {
-        hs.destroy();
-      }
-      if (as) {
-        as.destroy();
-      }
-    }
   };
   LoginJob.prototype.go = function () {
     var ok = this.okToGo();
@@ -2491,7 +2480,7 @@ function createLoginJob (lib, mixins, mylib) {
   };
   LoginJob.prototype.doDaLetMeIn = function () {
     this.letmeinresponse = null;
-    HotelAndApartmentHandlerMixin.prototype.destroy.call(this);
+    HotelAndApartmentHandlerMixin.prototype.purgeBothListenersAndSinks.call(this);
     (new mylib.LetMeInJob(
       this.destroyable,
       this.protocolsecurer,
@@ -2576,6 +2565,11 @@ function createLoginJob (lib, mixins, mylib) {
     this.acquireApartmentServiceSink();
   };
   LoginJob.prototype.onHotelSinkFail = function (reason) {
+    console.warn('Could not acquire sink on Hotel', reason);
+    if (reason && reason.code === 'CLIENT_SHOULD_FORGET') {
+      this.reject(reason);
+      return;
+    }
     this.doDaLetMeIn();
   };
   LoginJob.prototype.onHotelSinkDestroyed = function () {
@@ -2588,7 +2582,7 @@ function createLoginJob (lib, mixins, mylib) {
     }
     (new mylib.AcquireUserSinkJob(this.destroyable, this.hotelSink)).go().then(
       this.onApartmentSink.bind(this),
-      this.reject.bind(this)
+      this.onApartmentSinkFail.bind(this)
     );
   };
   LoginJob.prototype.onApartmentSink = function (usersink) {
@@ -2607,6 +2601,10 @@ function createLoginJob (lib, mixins, mylib) {
       this.onSessionSaved.bind(this),
       this.onSessionSaveFailed.bind(this)
     );
+  };
+  LoginJob.prototype.onApartmentSinkFail = function (reason) {
+    console.warn('Could not acquire Apartment sink on Hotel', reason);
+    this.doDaLetMeIn();
   };
   LoginJob.prototype.onSessionSaved = function (ok) {
     if (!this.okToProceed()) {
@@ -2696,6 +2694,18 @@ function createHotelAndApartmentSinkHandlerMixin (lib) {
     }
     */
   };
+  HotelAndApartmentHandlerMixin.prototype.purgeBothListenersAndSinks = function () {
+    this.purgeApartmentSinkDestroyedListener();
+    this.purgeHotelSinkDestroyedListener();
+    if (this.apartmentSink) {
+      this.apartmentSink.destroy();
+    }
+    this.apartmentSink = null;
+    if (this.hotelSink && this.hotelSink.destroyed) {
+      this.hotelSink.destroy();
+    }
+    this.hotelSink = null;
+  };
 
   HotelAndApartmentHandlerMixin.addMethods = function (klass) {
     lib.inheritMethods(klass, HotelAndApartmentHandlerMixin
@@ -2705,6 +2715,7 @@ function createHotelAndApartmentSinkHandlerMixin (lib) {
       ,'setApartmentSink'
       ,'onHotelSinkDestroyed'
       ,'onApartmentSinkDestroyed'
+      ,'purgeBothListenersAndSinks'
     );
   }
 
