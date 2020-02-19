@@ -556,7 +556,7 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
     this.jobs = new qlib.JobCollection();
     this.storages = new lib.DIContainer();
     this.dataSources = new lib.DIContainer();
-    this.commands = new lib.Map();
+    this.commands = new lib.DIContainer(); //lib.Map();
     this.state = null;
     this.error = null;
     this.operation = null;
@@ -678,6 +678,12 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
   };
   EnvironmentBase.prototype.toCommand = function (desc) {
     if (!desc.name) {
+      throw new lib.JSONizingError('NO_DATASOURCE_NAME', desc, 'No name:');
+    }
+    this.commands.register(desc.name, this.createCommand(desc.options));
+    return this.commands.waitFor(desc.name);
+    /*
+    if (!desc.name) {
       throw new lib.JSONizingError('NO_COMMAND_NAME', desc, 'No name:');
     }
     var oldc = this.commands.replace(desc.name, this.createCommand(desc.options));
@@ -685,6 +691,7 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
       oldc.destroy();
     }
     return q(true);
+    */
   };
   EnvironmentBase.prototype.toDataCommand = function (desc) {
     if (!desc.name) {
@@ -707,10 +714,15 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
     dss.unregisterDestroyable(dsname);
   }
   EnvironmentBase.prototype.onDeEstablished = function () {
-    var dss = this.dataSources;
+    var dss = this.dataSources, cmds = this.commands;
     if (dss) {
       dss.traverse(unregisterer.bind(null, dss));
     }
+    if (cmds) {
+      cmds.traverse(unregisterer.bind(null, cmds));
+    }
+    dss = null;
+    cmds = null;
   };
   EnvironmentBase.prototype.getDataSourceCtor = function (name) { //throws
     return DataSourceRegistry.get(name);
