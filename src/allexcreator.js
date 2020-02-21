@@ -3,7 +3,8 @@ function createAllexEnvironment (execlib, environmentRegistry, CommandBase) {
 
   var lib = execlib.lib,
     q = lib.q,
-    EnvironmentBase = environmentRegistry.get('.');
+    EnvironmentBase = environmentRegistry.get('.'),
+    _persistableStorageName = 'localpersistablestorage';
 
   function LocalCommand (options) {
     if (!(options && lib.isFunction(options.func))) {
@@ -29,12 +30,13 @@ function createAllexEnvironment (execlib, environmentRegistry, CommandBase) {
   
   function AllexEnvironment (options) {
     EnvironmentBase.call(this, options);
+    this.createStorage(_persistableStorageName);
   }
   lib.inherit (AllexEnvironment, EnvironmentBase);
-  AllexEnvironment.prototype.createDataSource = function (type, options) {
+  AllexEnvironment.prototype.createDataSource = function (type, options, name) {
     var ctor = this.getDataSourceCtor(type);
     if (!options || !options.sink && !options.sinks) {
-      return this.createSinkLessSource (type, options);
+      return this.createSinkLessSource (type, options, name);
     }
     if (options && options.sinks) {
       if (!ctor.IsMultiSink) {
@@ -54,10 +56,14 @@ function createAllexEnvironment (execlib, environmentRegistry, CommandBase) {
     throw new Error('Malformed options for type '+type);
   };
 
-  AllexEnvironment.prototype.createSinkLessSource = function (type, options) {
+  AllexEnvironment.prototype.createSinkLessSource = function (type, options, name) {
     var ctor;
     switch (type) {
       case 'jsdata': 
+        options.env_storage = {
+          get: this.getFromStorageSafe.bind(this, _persistableStorageName, name),
+          put: this.putToStorage.bind(this, _persistableStorageName, name)
+        };
         break;
       case 'localhash2array': 
         break;
@@ -115,6 +121,10 @@ function createAllexEnvironment (execlib, environmentRegistry, CommandBase) {
         throw new lib.Error('NOT_IMPLEMENTED_YET', options.type+' is not an applicable Command type for AllexEnvironment');
     }
     return new ctor(options.options);
+  };
+
+  AllexEnvironment.prototype.onDataSourceCreated = function (desc, ds) {
+    return EnvironmentBase.prototype.onDataSourceCreated.call(this, desc, ds);
   };
 
   environmentRegistry.register('allexbase', AllexEnvironment);

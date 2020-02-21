@@ -7,13 +7,14 @@ lR.register('allex_environmentlib',require('./src/libindex')(
 ));
 ALLEX.WEB_COMPONENTS.allex_environmentlib = lR.get('allex_environmentlib');
 
-},{"./src/libindex":21}],2:[function(require,module,exports){
+},{"./src/libindex":22}],2:[function(require,module,exports){
 function createAllexEnvironment (execlib, environmentRegistry, CommandBase) {
   'use strict';
 
   var lib = execlib.lib,
     q = lib.q,
-    EnvironmentBase = environmentRegistry.get('.');
+    EnvironmentBase = environmentRegistry.get('.'),
+    _persistableStorageName = 'localpersistablestorage';
 
   function LocalCommand (options) {
     if (!(options && lib.isFunction(options.func))) {
@@ -39,12 +40,13 @@ function createAllexEnvironment (execlib, environmentRegistry, CommandBase) {
   
   function AllexEnvironment (options) {
     EnvironmentBase.call(this, options);
+    this.createStorage(_persistableStorageName);
   }
   lib.inherit (AllexEnvironment, EnvironmentBase);
-  AllexEnvironment.prototype.createDataSource = function (type, options) {
+  AllexEnvironment.prototype.createDataSource = function (type, options, name) {
     var ctor = this.getDataSourceCtor(type);
     if (!options || !options.sink && !options.sinks) {
-      return this.createSinkLessSource (type, options);
+      return this.createSinkLessSource (type, options, name);
     }
     if (options && options.sinks) {
       if (!ctor.IsMultiSink) {
@@ -64,10 +66,14 @@ function createAllexEnvironment (execlib, environmentRegistry, CommandBase) {
     throw new Error('Malformed options for type '+type);
   };
 
-  AllexEnvironment.prototype.createSinkLessSource = function (type, options) {
+  AllexEnvironment.prototype.createSinkLessSource = function (type, options, name) {
     var ctor;
     switch (type) {
       case 'jsdata': 
+        options.env_storage = {
+          get: this.getFromStorageSafe.bind(this, _persistableStorageName, name),
+          put: this.putToStorage.bind(this, _persistableStorageName, name)
+        };
         break;
       case 'localhash2array': 
         break;
@@ -125,6 +131,10 @@ function createAllexEnvironment (execlib, environmentRegistry, CommandBase) {
         throw new lib.Error('NOT_IMPLEMENTED_YET', options.type+' is not an applicable Command type for AllexEnvironment');
     }
     return new ctor(options.options);
+  };
+
+  AllexEnvironment.prototype.onDataSourceCreated = function (desc, ds) {
+    return EnvironmentBase.prototype.onDataSourceCreated.call(this, desc, ds);
   };
 
   environmentRegistry.register('allexbase', AllexEnvironment);
@@ -523,7 +533,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
 
 module.exports = createAllexRemoteEnvironment;
 
-},{"./remotejobs":26,"./remotemixins":31}],4:[function(require,module,exports){
+},{"./remotejobs":27,"./remotemixins":32}],4:[function(require,module,exports){
 function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environmentRegistry) {
   'use strict';
 
@@ -659,7 +669,7 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
     if (!this.dataSources.busy(desc.name)) {
       ret = this.dataSources.waitFor(desc.name);
 
-      this.createDataSource(desc.type, desc.options).then(
+      this.createDataSource(desc.type, desc.options, desc.name).then(
         this.onDataSourceCreated.bind(this, desc),
         this.onFailedToCreateDataSource.bind(this, desc)
       );
@@ -682,16 +692,6 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
     }
     this.commands.register(desc.name, this.createCommand(desc.options));
     return this.commands.waitFor(desc.name);
-    /*
-    if (!desc.name) {
-      throw new lib.JSONizingError('NO_COMMAND_NAME', desc, 'No name:');
-    }
-    var oldc = this.commands.replace(desc.name, this.createCommand(desc.options));
-    if (oldc) {
-      oldc.destroy();
-    }
-    return q(true);
-    */
   };
   EnvironmentBase.prototype.toDataCommand = function (desc) {
     if (!desc.name) {
@@ -1775,26 +1775,39 @@ function createDataSourceRegistry (execlib, DataSourceRegistry) {
 
 module.exports = createDataSourceRegistry;
 
-},{"./allexcommanddatawaitercreator":6,"./allexdataplusdatacreator.js":7,"./allexdataplusleveldbcreator":8,"./allexdataquerycreator":9,"./allexhash2arraycreator":10,"./allexleveldbcreator":11,"./allexstatecreator":12,"./basecreator":13,"./busylogic":14,"./hash2arraymixincreator":15,"./jsdatacreator":17,"./localhash2arraycreator":18,"./sinkbasecreator":19,"./taskbasecreator":20}],17:[function(require,module,exports){
+},{"./allexcommanddatawaitercreator":6,"./allexdataplusdatacreator.js":7,"./allexdataplusleveldbcreator":8,"./allexdataquerycreator":9,"./allexhash2arraycreator":10,"./allexleveldbcreator":11,"./allexstatecreator":12,"./basecreator":13,"./busylogic":14,"./hash2arraymixincreator":15,"./jsdatacreator":17,"./localhash2arraycreator":18,"./sinkbasecreator":20,"./taskbasecreator":21}],17:[function(require,module,exports){
 function createJSDataDataSource(execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib,
+    q = lib.q,
+    qlib = lib.qlib,
     DataSourceBase = dataSourceRegistry.get('.'),
-    BusyLogic = dataSourceRegistry.get('busylogic');
+    BusyLogic = dataSourceRegistry.get('busylogic'),
+    jobs = require('./persistablejobs')(lib);
 
   function JSData (options) {
     DataSourceBase.call(this, options);
     this._bl = new BusyLogic(this);
-    this.data = options ? options.data : null;
+    this.persist = options.persist;
+    this.data = null; //options ? options.data : null;
+    this.envStorage = options ? options.env_storage : null;
+    this.jobs = new qlib.JobCollection();
+    this._fetchInitialData(options ? options.data : null);
   }
   lib.inherit (JSData, DataSourceBase);
   JSData.prototype.destroy = function () {
+    if (this.jobs) {
+      this.jobs.destroy();
+    }
+    this.jobs = null;
+    this.envStorage = null;
+    this.data = null;
+    this.persist = null;
     if (this._bl) {
       this._bl.destroy();
     }
     this._bl = null;
-    this.data = null;
     DataSourceBase.prototype.destroy.call(this);
   };
 
@@ -1805,13 +1818,10 @@ function createJSDataDataSource(execlib, dataSourceRegistry) {
   };
 
   JSData.prototype.setData = function (data) {
-    if (arguments.length) {
-      this.data = data;
-    }
-    if (!this.target) {
+    if (this.data === data) {
       return;
     }
-    this._bl.emitData();
+    this.jobs.run('.', new jobs.SetDataJob(this, data));
   };
 
   JSData.prototype.copyData = function () {
@@ -1826,12 +1836,21 @@ function createJSDataDataSource(execlib, dataSourceRegistry) {
     return this.data;
   };
 
+  JSData.prototype.processFetchedData = function (data) {
+    return data;
+  };
+
+  JSData.prototype._fetchInitialData = function (dflt) {
+    return this.jobs.run('.', new jobs.FetchInitialDataJob(this, dflt));
+  };
+
+
   dataSourceRegistry.register('jsdata', JSData);
 }
 
 module.exports = createJSDataDataSource;
 
-},{}],18:[function(require,module,exports){
+},{"./persistablejobs":19}],18:[function(require,module,exports){
 function createLocalHash2Array (execlib, dataSourceRegistry) {
   'use strict';
 
@@ -1890,6 +1909,142 @@ function createLocalHash2Array (execlib, dataSourceRegistry) {
 module.exports = createLocalHash2Array;
 
 },{}],19:[function(require,module,exports){
+function createPersistableJobs (lib) {
+  'use strict';
+
+  var mylib = {};
+  var q = lib.q,
+    qlib = lib.qlib,
+    JobOnDestroyableBase = qlib.JobOnDestroyableBase;
+
+  function JobOnPersistable (persistable, defer) {
+    JobOnDestroyableBase.call(this, persistable, defer);
+  }
+  lib.inherit(JobOnPersistable, JobOnDestroyableBase);
+  JobOnPersistable.prototype._destroyableOk = function () {
+    if (!this.destroyable) {
+      return false;
+    }
+    if (!this.destroyable._bl) {
+      return false;
+    }
+    return true;
+  };
+
+  function FetchInitialDataJob (persistable, deflt, defer) {
+    JobOnPersistable.call(this, persistable, defer);
+    this.deflt = deflt;
+  }
+  lib.inherit(FetchInitialDataJob, JobOnPersistable);
+  FetchInitialDataJob.prototype.destroy = function () {
+    this.deflt = null;
+    JobOnPersistable.prototype.destroy.call(this);
+  };
+  FetchInitialDataJob.prototype.go = function () {
+    var ok = this.okToGo();
+    if (!ok.ok) {
+      return ok.val;
+    }
+    this.fetchResult().then(
+      this.onFetchResult.bind(this),
+      this.reject.bind(this)
+    );
+    return ok.val;
+  };
+  FetchInitialDataJob.prototype.onFetchResult = function (res) {
+    if (!this.okToProceed()) {
+      return;
+    }
+    qlib.thenAny(this.destroyable.processFetchedData(res),
+      this.onFetchedDataProcessed.bind(this),
+      this.reject.bind(this)
+    );
+  };
+  FetchInitialDataJob.prototype.onFetchedDataProcessed = function (data) {
+    if (!this.okToProceed()) {
+      return;
+    }
+    qlib.promise2defer(
+      (new mylib.SetDataJob(this.destroyable, data)).go(),
+      this
+    );
+  };
+  FetchInitialDataJob.prototype.fetchResult = function () {
+    if (!this.destroyable.persist) {
+      return q(this.deflt);
+    }
+    if (!this.destroyable.envStorage) {
+      return q(this.deflt);
+    }
+    if (!lib.isFunction(this.destroyable.envStorage.get)) {
+      return q(this.deflt);
+    }
+    return this.destroyable.envStorage.get(this.deflt);
+  };
+
+  mylib.FetchInitialDataJob = FetchInitialDataJob;
+
+
+  function SetDataJob (persistable, data, defer) {
+    JobOnPersistable.call(this, persistable, defer);
+    this.data = data;
+  }
+  lib.inherit(SetDataJob, JobOnPersistable);
+  SetDataJob.prototype.destroy = function () {
+    this.data = null;
+    JobOnPersistable.prototype.destroy.call(this);
+  };
+  SetDataJob.prototype.go = function () {
+    var ok = this.okToGo();
+    if (!ok.ok) {
+      return ok.val;
+    }
+    if (lib.isUndef(this.data)) {
+      if (this.destroyable.target) {
+        this.destroyable._bl.emitData();
+      }
+      lib.runNext(this.resolve.bind(this, this.data));
+      return ok.val;
+    }
+    this.maybePersistData().then(
+      this.setDataAfterMaybePersist.bind(this),
+      this.reject.bind(this)
+    );
+    return ok.val;
+  };
+  SetDataJob.prototype.maybePersistData = function () {
+    if (!this.destroyable.persist) {
+      return q(this.data);
+    }
+    if (!this.destroyable.envStorage) {
+      return q(this.data);
+    }
+    if (!lib.isFunction(this.destroyable.envStorage.put)) {
+      return q(this.data);
+    }
+    return this.destroyable.envStorage.put(this.data).then(
+      qlib.returner(this.data)
+    );
+  };
+
+  SetDataJob.prototype.setDataAfterMaybePersist = function (data) {
+    if (!this.okToProceed()) {
+      return;
+    }
+    this.destroyable.data = data;
+    if (this.destroyable.target) {
+      this.destroyable._bl.emitData();
+    }
+    this.resolve(this.data);
+  };
+
+  mylib.SetDataJob = SetDataJob;
+
+  return mylib;
+}
+module.exports = createPersistableJobs;
+
+},{}],20:[function(require,module,exports){
 function createDataSourceSinkBase (execlib, dataSourceRegistry) {
   'use strict';
 
@@ -1991,7 +2146,7 @@ function createDataSourceSinkBase (execlib, dataSourceRegistry) {
 module.exports = createDataSourceSinkBase;
 
 
-},{}],20:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 function createDataSourceTaskBase (execlib, dataSourceRegistry) {
   'use strict';
 
@@ -2083,7 +2238,7 @@ function createDataSourceTaskBase (execlib, dataSourceRegistry) {
 module.exports = createDataSourceTaskBase;
 
 
-},{}],21:[function(require,module,exports){
+},{}],22:[function(require,module,exports){
 (function (global){
 function createEnvironmentFactory (execlib, leveldblib, UserRepresentation) {
   'use strict';
@@ -2137,7 +2292,7 @@ function createEnvironmentFactory (execlib, leveldblib, UserRepresentation) {
 module.exports = createEnvironmentFactory;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./allexcreator":2,"./allexremotecreator":3,"./basecreator":4,"./commandbasecreator":5,"./datasources":16,"./registrycreator":22}],22:[function(require,module,exports){
+},{"./allexcreator":2,"./allexremotecreator":3,"./basecreator":4,"./commandbasecreator":5,"./datasources":16,"./registrycreator":23}],23:[function(require,module,exports){
 function createRegistries (lib) {
   'use strict';
 
@@ -2187,7 +2342,7 @@ function createRegistries (lib) {
 
 module.exports = createRegistries;
 
-},{}],23:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 function createAcquireSinkOnHotelJob (execlib, mylib) {
   'use strict';
 
@@ -2240,7 +2395,7 @@ function createAcquireSinkOnHotelJob (execlib, mylib) {
 }
 module.exports = createAcquireSinkOnHotelJob;
 
-},{}],24:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 function createAcquireUserSinkJob (execlib, mylib) {
   'use strict';
 
@@ -2289,7 +2444,7 @@ function createAcquireUserSinkJob (execlib, mylib) {
 }
 module.exports = createAcquireUserSinkJob;
 
-},{}],25:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 function createCheckSessionJob (lib, mylib) {
   'use strict';
   var q = lib.q,
@@ -2340,7 +2495,7 @@ function createCheckSessionJob (lib, mylib) {
 }
 module.exports = createCheckSessionJob;
 
-},{}],26:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 function createRemoteJobs (execlib, mixins) {
   'use strict';
 
@@ -2356,7 +2511,7 @@ function createRemoteJobs (execlib, mixins) {
 }
 module.exports = createRemoteJobs;
 
-},{"./acquiresinkonhotelcreator":23,"./acquireusersinkcreator":24,"./checksessioncreator":25,"./letmeincreator":27,"./logincreator":28,"./onenvironmentcreator":29}],27:[function(require,module,exports){
+},{"./acquiresinkonhotelcreator":24,"./acquireusersinkcreator":25,"./checksessioncreator":26,"./letmeincreator":28,"./logincreator":29,"./onenvironmentcreator":30}],28:[function(require,module,exports){
 function createLetMeInJob (execlib, mylib) {
   'use strict';
 
@@ -2442,7 +2597,7 @@ function createLetMeInJob (execlib, mylib) {
 }
 module.exports = createLetMeInJob;
 
-},{}],28:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 function createLoginJob (lib, mixins, mylib) {
   'use strict';
 
@@ -2637,7 +2792,7 @@ function createLoginJob (lib, mixins, mylib) {
 }
 module.exports = createLoginJob;
 
-},{}],29:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 function createJobOnEnvironment (lib, mylib) {
   'use strict';
   var q = lib.q,
@@ -2656,7 +2811,7 @@ function createJobOnEnvironment (lib, mylib) {
 }
 module.exports = createJobOnEnvironment;
 
-},{}],30:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 function createHotelAndApartmentSinkHandlerMixin (lib) {
   'use strict';
 
@@ -2735,7 +2890,7 @@ function createHotelAndApartmentSinkHandlerMixin (lib) {
 }
 module.exports = createHotelAndApartmentSinkHandlerMixin;
 
-},{}],31:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 function createMixins (lib) {
   'use strict';
 
@@ -2745,4 +2900,4 @@ function createMixins (lib) {
 }
 module.exports = createMixins;
 
-},{"./hotelandapartmentsinkhandlercreator":30}]},{},[1]);
+},{"./hotelandapartmentsinkhandlercreator":31}]},{},[1]);

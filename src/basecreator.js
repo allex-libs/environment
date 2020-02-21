@@ -133,7 +133,7 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
     if (!this.dataSources.busy(desc.name)) {
       ret = this.dataSources.waitFor(desc.name);
 
-      this.createDataSource(desc.type, desc.options).then(
+      this.createDataSource(desc.type, desc.options, desc.name).then(
         this.onDataSourceCreated.bind(this, desc),
         this.onFailedToCreateDataSource.bind(this, desc)
       );

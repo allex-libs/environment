@@ -2,21 +2,34 @@ function createJSDataDataSource(execlib, dataSourceRegistry) {
   'use strict';
 
   var lib = execlib.lib,
+    q = lib.q,
+    qlib = lib.qlib,
     DataSourceBase = dataSourceRegistry.get('.'),
-    BusyLogic = dataSourceRegistry.get('busylogic');
+    BusyLogic = dataSourceRegistry.get('busylogic'),
+    jobs = require('./persistablejobs')(lib);
 
   function JSData (options) {
     DataSourceBase.call(this, options);
     this._bl = new BusyLogic(this);
-    this.data = options ? options.data : null;
+    this.persist = options.persist;
+    this.data = null; //options ? options.data : null;
+    this.envStorage = options ? options.env_storage : null;
+    this.jobs = new qlib.JobCollection();
+    this._fetchInitialData(options ? options.data : null);
   }
   lib.inherit (JSData, DataSourceBase);
   JSData.prototype.destroy = function () {
+    if (this.jobs) {
+      this.jobs.destroy();
+    }
+    this.jobs = null;
+    this.envStorage = null;
+    this.data = null;
+    this.persist = null;
     if (this._bl) {
       this._bl.destroy();
     }
     this._bl = null;
-    this.data = null;
     DataSourceBase.prototype.destroy.call(this);
   };
 
@@ -27,13 +40,10 @@ function createJSDataDataSource(execlib, dataSourceRegistry) {
   };
 
   JSData.prototype.setData = function (data) {
-    if (arguments.length) {
-      this.data = data;
-    }
-    if (!this.target) {
+    if (this.data === data) {
       return;
     }
-    this._bl.emitData();
+    this.jobs.run('.', new jobs.SetDataJob(this, data));
   };
 
   JSData.prototype.copyData = function () {
@@ -47,6 +57,15 @@ function createJSDataDataSource(execlib, dataSourceRegistry) {
 
     return this.data;
   };
+
+  JSData.prototype.processFetchedData = function (data) {
+    return data;
+  };
+
+  JSData.prototype._fetchInitialData = function (dflt) {
+    return this.jobs.run('.', new jobs.FetchInitialDataJob(this, dflt));
+  };
+
 
   dataSourceRegistry.register('jsdata', JSData);
 }
