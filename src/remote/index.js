@@ -50,7 +50,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
   function AllexRemoteDataCommand (representation, options) {
     AllexRemoteCommand.call(this, representation, options);
     this.waiter = options.waiter;
-    this.waiter.setData([]);
+    //this.waiter.setData([]);
   }
   lib.inherit(AllexRemoteDataCommand, AllexRemoteCommand);
   AllexRemoteDataCommand.prototype.destroy = function () {
@@ -167,6 +167,22 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     this.waiter.appendRecord(ret);
   };
 
+  function AllexDataResolvingDataCommand (representation, options) {
+    AllexRemoteDataCommand.call(this, representation, options);
+  }
+  lib.inherit(AllexDataResolvingDataCommand, AllexRemoteDataCommand);
+  AllexDataResolvingDataCommand.prototype.onSink = function (args, sink) {
+    var promise = AllexRemoteDataCommand.prototype.onSink.call(this, args, sink);
+    promise.done(this.onResolved.bind(this), this.onFailed.bind(this));
+    return promise;
+  };
+  AllexDataResolvingDataCommand.prototype.onResolved = function (data) {
+    this.waiter.setData(data);
+  };
+  AllexDataResolvingDataCommand.prototype.onFailed = function (reason) {
+    console.error(this.methodname, 'encountered an error', reason);
+  };
+
   function AllexRemoteEnvironment (options) {
     if (options && options.doNotStoreSession){
       if (!options) {
@@ -266,7 +282,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
   AllexRemoteEnvironment.prototype.createCommand = function (options) {
     var baseret, ctor;
     try {
-      return AllexEnvironment.prototype.createCommand.call(options);
+      return AllexEnvironment.prototype.createCommand.call(this, options);
     } catch (ignore) {}
     if (!options) {
       throw Error ('no options');
@@ -277,18 +293,20 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     if (!options.name) {
       throw new lib.JSONizingError ('NO_NAME_IN_OPTIONS', options, 'No name:');
     }
-    switch (options.type) {
-      case 'aggregation' : 
-        ctor = AllexAggregateDataCommand;
-        break;
-      case 'leveldbstreamer':
-        ctor = AllexLevelDBStreamerCommand;
-        break;
-      default:
-        ctor = AllexRemoteCommand;
-        break;
-    }
+    ctor = this.chooseCommandCtor(options.type);
     return new ctor(this.userRepresentation, options);
+  };
+  AllexRemoteEnvironment.prototype.chooseCommandCtor = function (type) {
+    switch (type) {
+      case 'aggregation' : 
+        return AllexAggregateDataCommand;
+      case 'leveldbstreamer':
+        return AllexLevelDBStreamerCommand;
+      case 'dataresolving':
+        return AllexDataResolvingDataCommand;
+      default:
+        return AllexRemoteCommand;
+    }
   };
   AllexRemoteEnvironment.prototype.recreateUserRepresentation = function () {
     this.set('state', 'pending');

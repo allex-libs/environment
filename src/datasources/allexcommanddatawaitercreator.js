@@ -5,7 +5,6 @@ function createAllexCommandDataWaiter(execlib, dataSourceRegistry) {
     JSData = dataSourceRegistry.get('jsdata');
 
   function AllexCommandDataWaiter (options) {
-    options.data = [];
     JSData.call(this, options);
   }
   lib.inherit(AllexCommandDataWaiter, JSData);

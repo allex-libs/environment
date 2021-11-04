@@ -11,7 +11,7 @@ function createEnvironmentFactory (execlib, leveldblib, UserRepresentation) {
   
   require('./basecreator')(execlib, leveldblib, dataSourceRegistry, environmentRegistry),
   require('./allexcreator')(execlib, environmentRegistry, CommandBase),
-  require('./allexremotecreator')(execlib, environmentRegistry, UserRepresentation, CommandBase);
+  require('./remote')(execlib, environmentRegistry, UserRepresentation, CommandBase);
 
 
   function createFromConstructor (ctor, options) {

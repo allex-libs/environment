@@ -120,6 +120,36 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
     }
     return q.all(promises);
   };
+  EnvironmentBase.prototype.addDataSources = function (dss) {
+    if (!lib.isArray(dss)) {
+      return q([]);
+    }
+    this.setConfigVal('datasources', (this.getConfigVal('datasources') || []).concat(dss));
+    //if (this.state === 'established') {
+      return q.all(dss.map(this.toDataSource.bind(this)));
+    //}
+    return q(true);
+  };
+  EnvironmentBase.prototype.addCommands = function (cs) {
+    if (!lib.isArray(cs)) {
+      return q([]);
+    }
+    this.setConfigVal('commands', (this.getConfigVal('commands') || []).concat(cs));
+    //if (this.state === 'established') {
+      return q.all(cs.map(this.toCommand.bind(this)));
+    //}
+    return q(true);
+  };
+  EnvironmentBase.prototype.addDataCommands = function (dcs) {
+    if (!lib.isArray(dcs)) {
+      return q([]);
+    }
+    this.setConfigVal('datacommands', (this.getConfigVal('datacommands') || []).concat(dcs));
+    //if (this.state === 'established') {
+      return q.all(dcs.map(this.toDataCommand.bind(this)));
+    //}
+    return q(true);
+  };
 
   EnvironmentBase.prototype.isEstablished = function () { return this.state === 'established';}
   EnvironmentBase.prototype.toDataSource = function (desc) {
@@ -130,15 +160,7 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
     if (!desc.type) {
       throw new lib.JSONizingError('NO_DATASOURCE_TYPE', desc, 'No type:');
     }
-    if (!this.dataSources.busy(desc.name)) {
-      ret = this.dataSources.waitFor(desc.name);
-
-      this.createDataSource(desc.type, desc.options, desc.name).then(
-        this.onDataSourceCreated.bind(this, desc),
-        this.onFailedToCreateDataSource.bind(this, desc)
-      );
-    }
-    return ret || this.dataSources.waitFor(desc.name);
+    return this.dataSources.queueCreation(desc.name, this.createDataSource.bind(this, desc.type, desc.options, desc.name));
   };
 
   EnvironmentBase.prototype.onFailedToCreateDataSource = function (desc) {
@@ -151,11 +173,14 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
     return q(ds);
   };
   EnvironmentBase.prototype.toCommand = function (desc) {
+    var opts, ret;
     if (!desc.name) {
       throw new lib.JSONizingError('NO_DATASOURCE_NAME', desc, 'No name:');
     }
-    this.commands.register(desc.name, this.createCommand(desc.options));
-    return this.commands.waitFor(desc.name);
+    opts = desc.options;
+    ret = this.commands.queueCreation(desc.name, this.createCommand.bind(this, opts));
+    opts = null;
+    return ret;
   };
   EnvironmentBase.prototype.toDataCommand = function (desc) {
     if (!desc.name) {
@@ -164,7 +189,7 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
     return this.toDataSource({
       name: desc.name,
       type: 'commandwaiter',
-      options: {}
+      options: {data: desc.initialdata}
     }).then(
       this.onDataSourceForDataCommand.bind(this, desc)
     );

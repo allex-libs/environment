@@ -31,7 +31,7 @@ function createAcquireSinkOnHotelJob (execlib, mylib) {
     return ok.val;
   };
   AcquireSinkOnHotelJob.prototype.doDaAcquire = function () {
-    var protocol = this.protocolsecurer('ws');
+    var protocol = this.protocolsecurer('http');
     if (this.task) {
       this.task.destroy();
     }
