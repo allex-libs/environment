@@ -326,10 +326,6 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
     ret = this.commands.queueCreation(desc.name, this.createCommand.bind(this, opts));
     opts = null;
     return ret;
-    /*
-    this.commands.register(desc.name, this.createCommand(desc.options));
-    return this.commands.waitFor(desc.name);
-    */
   };
   EnvironmentBase.prototype.toDataCommand = function (desc) {
     if (!desc.name) {
@@ -2032,12 +2028,22 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
   function AllexRemoteDataCommand (representation, options) {
     AllexRemoteCommand.call(this, representation, options);
     this.waiter = options.waiter;
+    this.resetoncall = options.resetoncall;
     //this.waiter.setData([]);
   }
   lib.inherit(AllexRemoteDataCommand, AllexRemoteCommand);
   AllexRemoteDataCommand.prototype.destroy = function () {
+    this.resetoncall = null;
     this.waiter = null;
     AllexRemoteCommand.prototype.destroy.call(this);
+  };
+  AllexRemoteDataCommand.prototype.doExecute = function (args) {
+    if (lib.defined(this.resetoncall)) {
+      if (this.waiter) {
+        this.waiter.setData(this.resetoncall);
+      }
+    }
+    return AllexRemoteCommand.prototype.doExecute.call(this, args);
   };
 
   function AllexAggregateDataCommand (representation, options) {
