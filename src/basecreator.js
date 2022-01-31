@@ -124,7 +124,7 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
     if (!lib.isArray(dss)) {
       return q([]);
     }
-    this.setConfigVal('datasources', (this.getConfigVal('datasources') || []).concat(dss));
+    this.setConfigVal('datasources', (this.getConfigVal('datasources') || []).concat(dss), true);
     //if (this.state === 'established') {
       return q.all(dss.map(this.toDataSource.bind(this)));
     //}
@@ -134,7 +134,7 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
     if (!lib.isArray(cs)) {
       return q([]);
     }
-    this.setConfigVal('commands', (this.getConfigVal('commands') || []).concat(cs));
+    this.setConfigVal('commands', (this.getConfigVal('commands') || []).concat(cs), true);
     //if (this.state === 'established') {
       return q.all(cs.map(this.toCommand.bind(this)));
     //}
@@ -144,7 +144,7 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
     if (!lib.isArray(dcs)) {
       return q([]);
     }
-    this.setConfigVal('datacommands', (this.getConfigVal('datacommands') || []).concat(dcs));
+    this.setConfigVal('datacommands', (this.getConfigVal('datacommands') || []).concat(dcs), true);
     //if (this.state === 'established') {
       return q.all(dcs.map(this.toDataCommand.bind(this)));
     //}

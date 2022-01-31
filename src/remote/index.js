@@ -321,7 +321,8 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
   AllexRemoteEnvironment.prototype.recreateUserRepresentation = function () {
     this.set('state', 'pending');
     if (this.userRepresentation) {
-      this.userRepresentation.destroy();
+      //this.userRepresentation.destroy();
+      return;
     }
     this.userRepresentation = new UserRepresentation();
   };
