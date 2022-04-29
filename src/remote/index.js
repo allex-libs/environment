@@ -284,6 +284,10 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     return this.jobs.run('.', new jobs.LoginJob(this, remoteStorageName, protocolSecurer, letMeInHeartBeat, credentials, entrypointmethod, defer));
   };
   AllexRemoteEnvironment.prototype.findSink = function (sinkname) {
+    if (!this.userRepresentation) {
+      console.error("What's wrong with me? I cannot findSink if I'va got no userRepresentation!", this);
+      return q(null);
+    }
     if (sinkname === '.') {
       return q(this.userRepresentation);
     }
