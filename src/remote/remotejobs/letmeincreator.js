@@ -30,7 +30,6 @@ function createLetMeInJob (execlib, mylib) {
       this.reject(new lib.Error('CANNOT_LOGIN', 'Cannot login without credentials'));
       return ok.val;
     }
-    this.destroyable.recreateUserRepresentation();
     execlib.loadDependencies('client', [
       '.',
       'allex:hotel'

@@ -208,7 +208,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     }
     this.address = options.entrypoint.address;
     this.port = options.entrypoint.port;
-    this.userRepresentation = null;
+    this.userRepresentation = new UserRepresentation();
     this.sessionid = null;
     this.secondphasesessionid = null;
     this.jobs = new qlib.JobCollection();
@@ -235,7 +235,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     AllexEnvironment.prototype.destroy.call(this);
   };
   AllexRemoteEnvironment.prototype.setApartmentSink = function (sink) {
-    this.recreateUserRepresentation();
+    this.set('state', 'pending');
     this.userRepresentation.setSink(sink);
     HotelAndApartmentHandlerMixin.prototype.setApartmentSink.call(this, sink);
     this.set('state', 'established');
@@ -285,8 +285,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
   };
   AllexRemoteEnvironment.prototype.findSink = function (sinkname) {
     if (!this.userRepresentation) {
-      console.error("What's wrong with me? I cannot findSink if I'va got no userRepresentation!", this);
-      return q(null);
+      return q.reject(new lib.Error('ALREADY_DESTROYED', 'This instance of '+this.constructor.name+' is already destroyed'));
     }
     if (sinkname === '.') {
       return q(this.userRepresentation);
@@ -321,14 +320,6 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
       default:
         return AllexRemoteCommand;
     }
-  };
-  AllexRemoteEnvironment.prototype.recreateUserRepresentation = function () {
-    this.set('state', 'pending');
-    if (this.userRepresentation) {
-      //this.userRepresentation.destroy();
-      return;
-    }
-    this.userRepresentation = new UserRepresentation();
   };
 
   AllexRemoteEnvironment.prototype.giveUp = function (credentials, defer) {
