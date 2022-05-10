@@ -38,7 +38,7 @@ function createAllexDataQueryDataSource(execlib, dataSourceRegistry) {
       this.data = [];
       this.fire();
     }
-    DataSourceTaskBase.prototype.start.call(this);
+    return DataSourceTaskBase.prototype.start.call(this);
   };
 
   AllexDataQuery.prototype._doStartTask = function (sink) {

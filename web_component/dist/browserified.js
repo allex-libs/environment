@@ -916,7 +916,7 @@ function createAllexDataQueryDataSource(execlib, dataSourceRegistry) {
       this.data = [];
       this.fire();
     }
-    DataSourceTaskBase.prototype.start.call(this);
+    return DataSourceTaskBase.prototype.start.call(this);
   };
 
   AllexDataQuery.prototype._doStartTask = function (sink) {
@@ -1209,16 +1209,15 @@ function createDataSourceBase (execlib, dataSourceRegistry) {
   };
 
   DataSourceBase.prototype.setTarget = function (target) {
+    this.target = null;
+    this.stop();
     if (!target) {
-      this.target = null;
-      this.stop();
       return;
     }
 
-    if (this.target) {
+    if (this.target && this.target != target) {
       throw new lib.Error('ALREADY_HAVE_TARGET', 'Already have a target');
     }
-    this.stop();
     this.target = target;
     this.start();
   };
@@ -1759,7 +1758,7 @@ function createDataSourceSinkBase (execlib, dataSourceRegistry) {
 
   DataSourceSinkBase.prototype.onGotSink = function (sink){
     if (this._should_stop) return q.resolve(true);
-    if (!sink.destroyed) return q.reject(false);
+    if (!sink.destroyed) return q.resolve(false);
 
     this._sink_instance = sink;
     this._sink_destroyed_listener = sink.destroyed.attach(this._onSinkDestroyed.bind(this));
@@ -2299,13 +2298,6 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
         return AllexRemoteCommand;
     }
   };
-  AllexRemoteEnvironment.prototype.recreateUserRepresentation = function () {
-
-  };
-
-  AllexRemoteEnvironment.prototype.waiterResolver = function (d) {
-    d.resolve(this.userRepresentation);
-  };
 
   AllexRemoteEnvironment.prototype.giveUp = function (credentials, defer) {
     this.pendingRequest = 0;
@@ -2692,12 +2684,15 @@ function createLoginJob (lib, mixins, mylib) {
     if (!ok.ok) {
       return ok.val;
     }
+    lib.runNext(this.init.bind(this));
+    return ok.val;
+  };
+  LoginJob.prototype.init = function () {
     if (this.destroyable.apartmentSink && this.destroyable.apartmentSink.destroyed) {
       this.resolve(true);
     } else {
       this.doDaLetMeIn();
     }
-    return ok.val;
   };
   LoginJob.prototype.doDaLetMeIn = function () {
     this.letmeinresponse = null;

@@ -38,12 +38,15 @@ function createLoginJob (lib, mixins, mylib) {
     if (!ok.ok) {
       return ok.val;
     }
+    lib.runNext(this.init.bind(this));
+    return ok.val;
+  };
+  LoginJob.prototype.init = function () {
     if (this.destroyable.apartmentSink && this.destroyable.apartmentSink.destroyed) {
       this.resolve(true);
     } else {
       this.doDaLetMeIn();
     }
-    return ok.val;
   };
   LoginJob.prototype.doDaLetMeIn = function () {
     this.letmeinresponse = null;

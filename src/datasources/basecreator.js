@@ -14,16 +14,15 @@ function createDataSourceBase (execlib, dataSourceRegistry) {
   };
 
   DataSourceBase.prototype.setTarget = function (target) {
+    this.target = null;
+    this.stop();
     if (!target) {
-      this.target = null;
-      this.stop();
       return;
     }
 
-    if (this.target) {
+    if (this.target && this.target != target) {
       throw new lib.Error('ALREADY_HAVE_TARGET', 'Already have a target');
     }
-    this.stop();
     this.target = target;
     this.start();
   };

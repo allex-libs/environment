@@ -79,7 +79,7 @@ function createDataSourceSinkBase (execlib, dataSourceRegistry) {
 
   DataSourceSinkBase.prototype.onGotSink = function (sink){
     if (this._should_stop) return q.resolve(true);
-    if (!sink.destroyed) return q.reject(false);
+    if (!sink.destroyed) return q.resolve(false);
 
     this._sink_instance = sink;
     this._sink_destroyed_listener = sink.destroyed.attach(this._onSinkDestroyed.bind(this));
