@@ -338,7 +338,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     this.set('state', 'pending');
     this.purgeHotelSinkDestroyedListener();
     this.purgeApartmentSinkDestroyedListener();
-    this.sendLetMeOutRequest({__sessions__id: this.sessionid}).done (this.set.bind(this, 'state', 'loggedout'));
+    this.sendLetMeOutRequest({__sessions__id: this.sessionid}).done (this.onLoggedOut.bind(this));
   };
 
   AllexRemoteEnvironment.prototype.sendLetMeOutRequest = function (credentials, d) {
@@ -401,6 +401,11 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
       return ret;
     }
     return this.login({__sessions__id: this.secondphasesessionid, secondphasetoken: token}, null, 'letMeInWithSession');
+  };
+
+  AllexRemoteEnvironment.prototype.onLoggedOut = function () {
+    HotelAndApartmentHandlerMixin.prototype.destroy.call(this);
+    this.set('state', 'loggedout');
   };
   AllexRemoteEnvironment.prototype.type = 'allexremote';
 
