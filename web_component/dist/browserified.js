@@ -2188,17 +2188,14 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     this.userRepresentation = new UserRepresentation();
     this.sessionid = null;
     this.secondphasesessionid = null;
-    this.jobs = new qlib.JobCollection();
+    this.connectionAttempt = null;
     this.checkForSessionId();
     this.createStorage(remoteStorageName);
   }
   lib.inherit(AllexRemoteEnvironment, AllexEnvironment);
   HotelAndApartmentHandlerMixin.addMethods(AllexRemoteEnvironment);
   AllexRemoteEnvironment.prototype.destroy = function () {
-    if (this.jobs) {
-      this.jobs.destroy();
-    }
-    this.jobs = null;
+    this.connectionAttempt = null;     
     this.secondphasesessionid = null;
     this.sessionid = null;
     if (this.userRepresentation) {
@@ -2700,6 +2697,12 @@ function createLoginJob (lib, mixins, mylib) {
     }
   };
   LoginJob.prototype.doDaLetMeIn = function () {
+    var ca = this.destroyable.connectionAttempt;
+    if (!lib.isNumber(ca)) {
+      this.destroyable.set('connectionAttempt', 0);
+    } else {
+      this.destroyable.set('connectionAttempt', ca+1);
+    }
     this.letmeinresponse = null;
     HotelAndApartmentHandlerMixin.prototype.purgeBothListenersAndSinks.call(this);
     (new mylib.LetMeInJob(
@@ -2834,6 +2837,7 @@ function createLoginJob (lib, mixins, mylib) {
     this.destroyable.sessionid = this.letmeinresponse.session;
     this.destroyable.setApartmentSink(this.apartmentSink);
     this.sinksreported = true;
+    this.destroyable.set('connectionAttempt', null);
     this.resolve(true);
   };
   LoginJob.prototype.onSessionSaveFailed = function (reason) {

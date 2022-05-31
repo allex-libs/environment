@@ -211,17 +211,14 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     this.userRepresentation = new UserRepresentation();
     this.sessionid = null;
     this.secondphasesessionid = null;
-    this.jobs = new qlib.JobCollection();
+    this.connectionAttempt = null;
     this.checkForSessionId();
     this.createStorage(remoteStorageName);
   }
   lib.inherit(AllexRemoteEnvironment, AllexEnvironment);
   HotelAndApartmentHandlerMixin.addMethods(AllexRemoteEnvironment);
   AllexRemoteEnvironment.prototype.destroy = function () {
-    if (this.jobs) {
-      this.jobs.destroy();
-    }
-    this.jobs = null;
+    this.connectionAttempt = null;     
     this.secondphasesessionid = null;
     this.sessionid = null;
     if (this.userRepresentation) {

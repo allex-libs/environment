@@ -49,6 +49,12 @@ function createLoginJob (lib, mixins, mylib) {
     }
   };
   LoginJob.prototype.doDaLetMeIn = function () {
+    var ca = this.destroyable.connectionAttempt;
+    if (!lib.isNumber(ca)) {
+      this.destroyable.set('connectionAttempt', 0);
+    } else {
+      this.destroyable.set('connectionAttempt', ca+1);
+    }
     this.letmeinresponse = null;
     HotelAndApartmentHandlerMixin.prototype.purgeBothListenersAndSinks.call(this);
     (new mylib.LetMeInJob(
@@ -183,6 +189,7 @@ function createLoginJob (lib, mixins, mylib) {
     this.destroyable.sessionid = this.letmeinresponse.session;
     this.destroyable.setApartmentSink(this.apartmentSink);
     this.sinksreported = true;
+    this.destroyable.set('connectionAttempt', null);
     this.resolve(true);
   };
   LoginJob.prototype.onSessionSaveFailed = function (reason) {
