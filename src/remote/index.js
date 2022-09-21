@@ -11,6 +11,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
   var lib = execlib.lib,
     q = lib.q,
     qlib = lib.qlib,
+    taskRegistry = execlib.execSuite.taskRegistry,
     remoteStorageName = 'remoteenvironmentstorage',
     letMeInHeartBeat = lib.intervals.Second,
     AllexEnvironment = environmentRegistry.get('allexbase'),
@@ -22,12 +23,14 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     CommandBase.call(this);
     this.representation = null;
     this.methodname = options.name;
+    this.sessionlevel = !!options.session;
     this.setRepresentation(representation, options.sink);
   }
   lib.inherit(AllexRemoteCommand, CommandBase);
   AllexRemoteCommand.prototype.destroy = function () {
+    this.sessionlevel = null;
     this.methodname = null;
-    this.methodname = null;
+    this.representation = null;
   };
   AllexRemoteCommand.prototype.setRepresentation = function (representation, sinkname) {
     if (sinkname === '.') {
@@ -37,14 +40,30 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     this.representation = representation.subsinks[sinkname];
   };
   AllexRemoteCommand.prototype.doExecute = function (args) {
-    args.unshift(this.methodname);
-    return this.representation.waitForSink().then(
+    var ret;
+    ret = this.representation.waitForSink().then(
       this.onSink.bind(this, args)
     );
+    args = null;
+    return ret;
   };
   AllexRemoteCommand.prototype.onSink = function (args, sink) {
     console.log('calling', arguments);
-    return sink.call.apply(sink, args);
+    var d, ret;
+    if (!this.sessionlevel) {
+      return sink.call.apply(sink, [this.methodname].concat(args));
+    }
+    d = q.defer();
+    ret = d.promise;
+    taskRegistry.run('invokeSessionMethod', {
+      sink: sink,
+      methodname: this.methodname,
+      params: args,
+      onSuccess: d.resolve.bind(d),
+      onNotify: d.notify.bind(d),
+      onError: d.reject.bind(d)
+    });
+    return ret;
   };
 
   function AllexRemoteDataCommand (representation, options) {
