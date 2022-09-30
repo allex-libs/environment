@@ -261,12 +261,20 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     this.checkForSessionId();
   };
   AllexRemoteEnvironment.prototype.checkForSessionId = function () {
-    return this.jobs.run('.', new jobs.CheckSessionJob(this, remoteStorageName)).then(
+    return this.jobs.run('.', new jobs.CheckSessionJob(this, remoteStorageName, false)).then(
       this.loginWithSession.bind(this)
     );
   };
   AllexRemoteEnvironment.prototype.loginWithSession = function (sessionid) {
     return this.login({__sessions__id: sessionid.sessionid}, null, 'letMeInWithSession');
+  };
+  AllexRemoteEnvironment.prototype.cloneMySession = function () {
+    return this.jobs.run('.', new jobs.CheckSessionJob(this, remoteStorageName, true)).then(
+      this.cloneSession.bind(this)
+    );
+  };
+  AllexRemoteEnvironment.prototype.cloneSession = function (sessionid) {
+    return this.jobs.run('.', new jobs.CloneSessionJob(this, protocolSecurer, {__sessions__id: sessionid.sessionid}));
   };
 
   function webMethodResolver(defer,res){

@@ -3,6 +3,8 @@ function createRemoteJobs (execlib, mixins) {
 
   var ret = {};
   require('./onenvironmentcreator')(execlib.lib, ret);
+  require('./entrypointcallercreator')(execlib.lib, ret);
+  require('./clonesessioncreator')(execlib.lib, ret);
   require('./checksessioncreator')(execlib.lib, ret);
   require('./letmeincreator')(execlib, ret);
   require('./logincreator')(execlib.lib, mixins, ret);

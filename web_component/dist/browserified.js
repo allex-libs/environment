@@ -2238,12 +2238,20 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     this.checkForSessionId();
   };
   AllexRemoteEnvironment.prototype.checkForSessionId = function () {
-    return this.jobs.run('.', new jobs.CheckSessionJob(this, remoteStorageName)).then(
+    return this.jobs.run('.', new jobs.CheckSessionJob(this, remoteStorageName, false)).then(
       this.loginWithSession.bind(this)
     );
   };
   AllexRemoteEnvironment.prototype.loginWithSession = function (sessionid) {
     return this.login({__sessions__id: sessionid.sessionid}, null, 'letMeInWithSession');
+  };
+  AllexRemoteEnvironment.prototype.cloneMySession = function () {
+    return this.jobs.run('.', new jobs.CheckSessionJob(this, remoteStorageName, true)).then(
+      this.cloneSession.bind(this)
+    );
+  };
+  AllexRemoteEnvironment.prototype.cloneSession = function (sessionid) {
+    return this.jobs.run('.', new jobs.CloneSessionJob(this, protocolSecurer, {__sessions__id: sessionid.sessionid}));
   };
 
   function webMethodResolver(defer,res){
@@ -2410,7 +2418,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
 
 module.exports = createAllexRemoteEnvironment;
 
-},{"./remotejobs":27,"./remotemixins":32}],24:[function(require,module,exports){
+},{"./remotejobs":29,"./remotemixins":34}],24:[function(require,module,exports){
 function createAcquireSinkOnHotelJob (execlib, mylib) {
   'use strict';
 
@@ -2519,12 +2527,14 @@ function createCheckSessionJob (lib, mylib) {
     qlib = lib.qlib,
     JobOnEnvironment = mylib.JobOnEnvironment;
 
-  function CheckSessionJob (env, remotestoragename, defer) {
+  function CheckSessionJob (env, remotestoragename, donttouchstate, defer) {
     JobOnEnvironment.call(this, env, defer);
     this.remotestoragename = remotestoragename;
+    this.donttouchstate = donttouchstate;
   }
   lib.inherit(CheckSessionJob, JobOnEnvironment);
   CheckSessionJob.prototype.destroy = function () {
+    this.donttouchstate = null;
     this.remotestoragename = null;
     JobOnEnvironment.prototype.destroy.call(this);
   };
@@ -2533,12 +2543,36 @@ function createCheckSessionJob (lib, mylib) {
     if (!ok.ok) {
       return ok.val;
     }
-    this.destroyable.set('state', 'pending');
+    lib.runNext(this.fetchSessionId.bind(this));
+    return ok.val;
+  };
+  CheckSessionJob.prototype.fetchSessionId = function () {
+    var loc = window.location, params, sessionid;
+    if (loc && loc.search) {
+      params = new URLSearchParams(loc.search);
+      sessionid = params.get('allexsessionid');
+      if (sessionid) {
+        this.onSessionId({sessionid: sessionid});
+        return;
+      }
+      /*
+      query = params.get('allexquery');
+      if (query) {
+        try {
+          query = JSON.parse(decodeURI(loc.search));
+        } catch (e) {
+          query = '';
+        }
+      }
+      */
+    }
+    if (!this.donttouchstate) {
+      this.destroyable.set('state', 'pending');
+    }
     this.destroyable.getFromStorage(this.remotestoragename, 'sessionid').then(
       this.onSessionId.bind(this),
       this.onGetSessionIDFromStorageFailed.bind(this)
     );
-    return ok.val;
   };
   CheckSessionJob.prototype.onSessionId = function (sessionid) {
     if (!this.okToProceed()) {
@@ -2555,7 +2589,9 @@ function createCheckSessionJob (lib, mylib) {
     if (!this.okToProceed()) {
       return;
     }
-    this.destroyable.set('state', 'loggedout');
+    if (!this.donttouchstate) {
+      this.destroyable.set('state', 'loggedout');
+    }
     this.reject(new lib.Error('NO_SESSION_ID'));
   };
 
@@ -2564,11 +2600,103 @@ function createCheckSessionJob (lib, mylib) {
 module.exports = createCheckSessionJob;
 
 },{}],27:[function(require,module,exports){
+function createCloneSessionJob (lib, mylib) {
+  'use strict';
+
+  var q = lib.q,
+  qlib = lib.qlib,
+  EntryPointCallerJob = mylib.EntryPointCallerJob;
+
+  function CloneSessionJob (env, protocolsecurer, credentials, defer) {
+    EntryPointCallerJob.call(this, env, protocolsecurer, credentials, 'cloneSession', defer);
+  }
+  lib.inherit(CloneSessionJob, EntryPointCallerJob);
+  CloneSessionJob.prototype.go = function () {
+    var ok = this.okToGo();
+    if (!ok.ok) {
+      return ok.val;
+    }
+    if (!this.credentials) {
+      this.reject(new lib.Error('CANNOT_CLONESESSION', 'Cannot clone session without credentials'));
+      return ok.val;
+    }
+    lib.runNext(this.doTheCall.bind(this));
+    return ok.val;
+  };
+
+  mylib.CloneSessionJob = CloneSessionJob;
+}
+module.exports = createCloneSessionJob;
+},{}],28:[function(require,module,exports){
+function createEntryPointCallerJob (lib, mylib) {
+  'use strict';
+
+  var q = lib.q,
+    qlib = lib.qlib,
+    JobOnEnvironment = mylib.JobOnEnvironment;
+
+  function EntryPointCallerJob (env, protocolsecurer, credentials, entrypointmethod, defer) {
+    JobOnEnvironment.call(this, env, defer);
+    this.protocolsecurer = protocolsecurer;
+    this.credentials = credentials;
+    this.entrypointmethod = entrypointmethod;
+  }
+  lib.inherit(EntryPointCallerJob, JobOnEnvironment);
+  EntryPointCallerJob.prototype.destroy = function () {
+    this.entrypointmethod = null;
+    this.credentials = null;
+    this.protocolsecurer = null;
+    JobOnEnvironment.prototype.destroy.call(this);
+  };
+
+  EntryPointCallerJob.prototype.doTheCall = function (callobj) {
+    var url = this.protocolsecurer('http')+'://'+this.destroyable.address+':'+this.destroyable.port+'/'+ (this.entrypointmethod || 'letMeIn');
+    lib.request(url, {
+      parameters: this.credentials,
+      onComplete: this.onEntryPointResponse.bind(this),
+      onError: this.reject.bind(this)
+    });
+  };
+  EntryPointCallerJob.prototype.parseAndResolve = function (response) {
+    try {
+      this.resolve(JSON.parse(response));
+    } catch (e) {
+      console.error('problem with', response);
+      console.error(e);
+      this.reject(e);
+    }
+  };
+
+  EntryPointCallerJob.prototype.onEntryPointResponse = function (response) {
+    if (!this.okToProceed()) {
+      return;
+    }
+    if (!response) {
+      this.resolve(null);
+      return;
+    }
+    if ('data' in response) {
+      this.parseAndResolve(response.data);
+      return;
+    }
+    if ('response' in response) {
+      this.parseAndResolve(response.response);
+      return;
+    }
+    this.resolve(response);
+  };
+
+  mylib.EntryPointCallerJob = EntryPointCallerJob;
+}
+module.exports = createEntryPointCallerJob;
+},{}],29:[function(require,module,exports){
 function createRemoteJobs (execlib, mixins) {
   'use strict';
 
   var ret = {};
   require('./onenvironmentcreator')(execlib.lib, ret);
+  require('./entrypointcallercreator')(execlib.lib, ret);
+  require('./clonesessioncreator')(execlib.lib, ret);
   require('./checksessioncreator')(execlib.lib, ret);
   require('./letmeincreator')(execlib, ret);
   require('./logincreator')(execlib.lib, mixins, ret);
@@ -2579,29 +2707,23 @@ function createRemoteJobs (execlib, mixins) {
 }
 module.exports = createRemoteJobs;
 
-},{"./acquiresinkonhotelcreator":24,"./acquireusersinkcreator":25,"./checksessioncreator":26,"./letmeincreator":28,"./logincreator":29,"./onenvironmentcreator":30}],28:[function(require,module,exports){
+},{"./acquiresinkonhotelcreator":24,"./acquireusersinkcreator":25,"./checksessioncreator":26,"./clonesessioncreator":27,"./entrypointcallercreator":28,"./letmeincreator":30,"./logincreator":31,"./onenvironmentcreator":32}],30:[function(require,module,exports){
 function createLetMeInJob (execlib, mylib) {
   'use strict';
 
   var lib = execlib.lib,
     q = lib.q,
     qlib = lib.qlib,
-    JobOnEnvironment = mylib.JobOnEnvironment;
+    EntryPointCallerJob = mylib.EntryPointCallerJob;
 
   function LetMeInJob (env, protocolsecurer, heartbeat, credentials, entrypointmethod, defer) {
-    JobOnEnvironment.call(this, env, defer);
-    this.protocolsecurer = protocolsecurer;
+    EntryPointCallerJob.call(this, env, protocolsecurer, credentials, entrypointmethod, defer);
     this.heartbeat = heartbeat;
-    this.credentials = credentials;
-    this.entrypointmethod = entrypointmethod;
   }
-  lib.inherit(LetMeInJob, JobOnEnvironment);
+  lib.inherit(LetMeInJob, EntryPointCallerJob);
   LetMeInJob.prototype.destroy = function () {
-    this.entrypointmethod = null;
-    this.credentials = null;
     this.heartbeat = null;
-    this.protocolsecurer = null;
-    JobOnEnvironment.prototype.destroy.call(this);
+    EntryPointCallerJob.prototype.destroy.call(this);
   };
   LetMeInJob.prototype.go = function () {
     var ok = this.okToGo();
@@ -2622,40 +2744,17 @@ function createLetMeInJob (execlib, mylib) {
     if (!this.okToProceed()) {
       return;
     }
+    /*
     lib.request(this.protocolsecurer('http')+'://'+this.destroyable.address+':'+this.destroyable.port+'/'+ (this.entrypointmethod || 'letMeIn'), {
       parameters: this.credentials,
       onComplete: this.onLetMeInResponse.bind(this),
       onError: this.reject.bind(this)
     });
+    */
+    this.doTheCall();
     lib.runNext(this.onStale.bind(this), 10*this.heartbeat);
   };
-  LetMeInJob.prototype.onLetMeInResponse = function (response) {
-    if (!this.okToProceed()) {
-      return;
-    }
-    if (!response) {
-      this.resolve(null);
-      return;
-    }
-    if ('data' in response) {
-      this.parseAndResolve(response.data);
-      return;
-    }
-    if ('response' in response) {
-      this.parseAndResolve(response.response);
-      return;
-    }
-    this.resolve(response);
-  };
-  LetMeInJob.prototype.parseAndResolve = function (response) {
-    try {
-      this.resolve(JSON.parse(response));
-    } catch (e) {
-      console.error('problem with', response);
-      console.error(e);
-      this.reject(e);
-    }
-  };
+
   LetMeInJob.prototype.onStale = function () {
     this.reject(new lib.Error('STALE_LET_ME_IN_REQUEST', 'Stale request'));
   };
@@ -2664,7 +2763,7 @@ function createLetMeInJob (execlib, mylib) {
 }
 module.exports = createLetMeInJob;
 
-},{}],29:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 function createLoginJob (lib, mixins, mylib) {
   'use strict';
 
@@ -2869,7 +2968,7 @@ function createLoginJob (lib, mixins, mylib) {
 }
 module.exports = createLoginJob;
 
-},{}],30:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 function createJobOnEnvironment (lib, mylib) {
   'use strict';
   var q = lib.q,
@@ -2888,7 +2987,7 @@ function createJobOnEnvironment (lib, mylib) {
 }
 module.exports = createJobOnEnvironment;
 
-},{}],31:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 function createHotelAndApartmentSinkHandlerMixin (lib) {
   'use strict';
 
@@ -2967,7 +3066,7 @@ function createHotelAndApartmentSinkHandlerMixin (lib) {
 }
 module.exports = createHotelAndApartmentSinkHandlerMixin;
 
-},{}],32:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 function createMixins (lib) {
   'use strict';
 
@@ -2977,4 +3076,4 @@ function createMixins (lib) {
 }
 module.exports = createMixins;
 
-},{"./hotelandapartmentsinkhandlercreator":31}]},{},[1]);
+},{"./hotelandapartmentsinkhandlercreator":33}]},{},[1]);

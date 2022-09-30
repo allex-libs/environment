@@ -4,22 +4,16 @@ function createLetMeInJob (execlib, mylib) {
   var lib = execlib.lib,
     q = lib.q,
     qlib = lib.qlib,
-    JobOnEnvironment = mylib.JobOnEnvironment;
+    EntryPointCallerJob = mylib.EntryPointCallerJob;
 
   function LetMeInJob (env, protocolsecurer, heartbeat, credentials, entrypointmethod, defer) {
-    JobOnEnvironment.call(this, env, defer);
-    this.protocolsecurer = protocolsecurer;
+    EntryPointCallerJob.call(this, env, protocolsecurer, credentials, entrypointmethod, defer);
     this.heartbeat = heartbeat;
-    this.credentials = credentials;
-    this.entrypointmethod = entrypointmethod;
   }
-  lib.inherit(LetMeInJob, JobOnEnvironment);
+  lib.inherit(LetMeInJob, EntryPointCallerJob);
   LetMeInJob.prototype.destroy = function () {
-    this.entrypointmethod = null;
-    this.credentials = null;
     this.heartbeat = null;
-    this.protocolsecurer = null;
-    JobOnEnvironment.prototype.destroy.call(this);
+    EntryPointCallerJob.prototype.destroy.call(this);
   };
   LetMeInJob.prototype.go = function () {
     var ok = this.okToGo();
@@ -40,40 +34,17 @@ function createLetMeInJob (execlib, mylib) {
     if (!this.okToProceed()) {
       return;
     }
+    /*
     lib.request(this.protocolsecurer('http')+'://'+this.destroyable.address+':'+this.destroyable.port+'/'+ (this.entrypointmethod || 'letMeIn'), {
       parameters: this.credentials,
       onComplete: this.onLetMeInResponse.bind(this),
       onError: this.reject.bind(this)
     });
+    */
+    this.doTheCall();
     lib.runNext(this.onStale.bind(this), 10*this.heartbeat);
   };
-  LetMeInJob.prototype.onLetMeInResponse = function (response) {
-    if (!this.okToProceed()) {
-      return;
-    }
-    if (!response) {
-      this.resolve(null);
-      return;
-    }
-    if ('data' in response) {
-      this.parseAndResolve(response.data);
-      return;
-    }
-    if ('response' in response) {
-      this.parseAndResolve(response.response);
-      return;
-    }
-    this.resolve(response);
-  };
-  LetMeInJob.prototype.parseAndResolve = function (response) {
-    try {
-      this.resolve(JSON.parse(response));
-    } catch (e) {
-      console.error('problem with', response);
-      console.error(e);
-      this.reject(e);
-    }
-  };
+
   LetMeInJob.prototype.onStale = function () {
     this.reject(new lib.Error('STALE_LET_ME_IN_REQUEST', 'Stale request'));
   };
