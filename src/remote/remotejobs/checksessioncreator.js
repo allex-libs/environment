@@ -24,24 +24,14 @@ function createCheckSessionJob (lib, mylib) {
     return ok.val;
   };
   CheckSessionJob.prototype.fetchSessionId = function () {
-    var loc = window.location, params, sessionid;
-    if (loc && loc.search) {
-      params = new URLSearchParams(loc.search);
-      sessionid = params.get('allexsessionid');
-      if (sessionid) {
-        this.onSessionId({sessionid: sessionid});
-        return;
-      }
-      /*
-      query = params.get('allexquery');
-      if (query) {
-        try {
-          query = JSON.parse(decodeURI(loc.search));
-        } catch (e) {
-          query = '';
-        }
-      }
-      */
+    var sessionid;
+    if (!this.okToProceed()) {
+      return;
+    }
+    sessionid = mylib.helpers.windowAllexSessionId();
+    if (sessionid) {
+      this.onSessionId({sessionid: sessionid});
+      return;
     }
     if (!this.donttouchstate) {
       this.destroyable.set('state', 'pending');

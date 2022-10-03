@@ -2418,7 +2418,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
 
 module.exports = createAllexRemoteEnvironment;
 
-},{"./remotejobs":29,"./remotemixins":34}],24:[function(require,module,exports){
+},{"./remotejobs":30,"./remotemixins":35}],24:[function(require,module,exports){
 function createAcquireSinkOnHotelJob (execlib, mylib) {
   'use strict';
 
@@ -2547,24 +2547,14 @@ function createCheckSessionJob (lib, mylib) {
     return ok.val;
   };
   CheckSessionJob.prototype.fetchSessionId = function () {
-    var loc = window.location, params, sessionid;
-    if (loc && loc.search) {
-      params = new URLSearchParams(loc.search);
-      sessionid = params.get('allexsessionid');
-      if (sessionid) {
-        this.onSessionId({sessionid: sessionid});
-        return;
-      }
-      /*
-      query = params.get('allexquery');
-      if (query) {
-        try {
-          query = JSON.parse(decodeURI(loc.search));
-        } catch (e) {
-          query = '';
-        }
-      }
-      */
+    var sessionid;
+    if (!this.okToProceed()) {
+      return;
+    }
+    sessionid = mylib.helpers.windowAllexSessionId();
+    if (sessionid) {
+      this.onSessionId({sessionid: sessionid});
+      return;
     }
     if (!this.donttouchstate) {
       this.destroyable.set('state', 'pending');
@@ -2690,10 +2680,30 @@ function createEntryPointCallerJob (lib, mylib) {
 }
 module.exports = createEntryPointCallerJob;
 },{}],29:[function(require,module,exports){
+function createJobHelpers (lib, outerlib) {
+  'use strict';
+
+  var mylib = {};
+
+  function windowAllexSessionId () {
+    var loc = window.location, params, sessionid;
+    if (loc && loc.search) {
+      params = new URLSearchParams(loc.search);
+      return params.get('allexsessionid');
+    }
+  }
+
+  mylib.windowAllexSessionId = windowAllexSessionId;
+
+  outerlib.helpers = mylib;
+}
+module.exports = createJobHelpers;
+},{}],30:[function(require,module,exports){
 function createRemoteJobs (execlib, mixins) {
   'use strict';
 
   var ret = {};
+  require('./helpers')(execlib.lib, ret);
   require('./onenvironmentcreator')(execlib.lib, ret);
   require('./entrypointcallercreator')(execlib.lib, ret);
   require('./clonesessioncreator')(execlib.lib, ret);
@@ -2707,7 +2717,7 @@ function createRemoteJobs (execlib, mixins) {
 }
 module.exports = createRemoteJobs;
 
-},{"./acquiresinkonhotelcreator":24,"./acquireusersinkcreator":25,"./checksessioncreator":26,"./clonesessioncreator":27,"./entrypointcallercreator":28,"./letmeincreator":30,"./logincreator":31,"./onenvironmentcreator":32}],30:[function(require,module,exports){
+},{"./acquiresinkonhotelcreator":24,"./acquireusersinkcreator":25,"./checksessioncreator":26,"./clonesessioncreator":27,"./entrypointcallercreator":28,"./helpers":29,"./letmeincreator":31,"./logincreator":32,"./onenvironmentcreator":33}],31:[function(require,module,exports){
 function createLetMeInJob (execlib, mylib) {
   'use strict';
 
@@ -2763,7 +2773,7 @@ function createLetMeInJob (execlib, mylib) {
 }
 module.exports = createLetMeInJob;
 
-},{}],31:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 function createLoginJob (lib, mixins, mylib) {
   'use strict';
 
@@ -2939,6 +2949,10 @@ function createLoginJob (lib, mixins, mylib) {
       return;
     }
     HotelAndApartmentHandlerMixin.prototype.setApartmentSink.call(this, usersink);
+    if (mylib.helpers.windowAllexSessionId()) {
+      this.onSessionSaved(true);
+      return;
+    }
     this.destroyable.putToStorage(this.remotestoragename, 'sessionid', {sessionid: this.letmeinresponse.session, token: lib.uid()}).then(
       this.onSessionSaved.bind(this),
       this.onSessionSaveFailed.bind(this)
@@ -2968,7 +2982,7 @@ function createLoginJob (lib, mixins, mylib) {
 }
 module.exports = createLoginJob;
 
-},{}],32:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 function createJobOnEnvironment (lib, mylib) {
   'use strict';
   var q = lib.q,
@@ -2987,7 +3001,7 @@ function createJobOnEnvironment (lib, mylib) {
 }
 module.exports = createJobOnEnvironment;
 
-},{}],33:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 function createHotelAndApartmentSinkHandlerMixin (lib) {
   'use strict';
 
@@ -3066,7 +3080,7 @@ function createHotelAndApartmentSinkHandlerMixin (lib) {
 }
 module.exports = createHotelAndApartmentSinkHandlerMixin;
 
-},{}],34:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 function createMixins (lib) {
   'use strict';
 
@@ -3076,4 +3090,4 @@ function createMixins (lib) {
 }
 module.exports = createMixins;
 
-},{"./hotelandapartmentsinkhandlercreator":33}]},{},[1]);
+},{"./hotelandapartmentsinkhandlercreator":34}]},{},[1]);

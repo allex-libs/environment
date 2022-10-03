@@ -173,6 +173,10 @@ function createLoginJob (lib, mixins, mylib) {
       return;
     }
     HotelAndApartmentHandlerMixin.prototype.setApartmentSink.call(this, usersink);
+    if (mylib.helpers.windowAllexSessionId()) {
+      this.onSessionSaved(true);
+      return;
+    }
     this.destroyable.putToStorage(this.remotestoragename, 'sessionid', {sessionid: this.letmeinresponse.session, token: lib.uid()}).then(
       this.onSessionSaved.bind(this),
       this.onSessionSaveFailed.bind(this)

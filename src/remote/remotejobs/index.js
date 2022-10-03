@@ -2,6 +2,7 @@ function createRemoteJobs (execlib, mixins) {
   'use strict';
 
   var ret = {};
+  require('./helpers')(execlib.lib, ret);
   require('./onenvironmentcreator')(execlib.lib, ret);
   require('./entrypointcallercreator')(execlib.lib, ret);
   require('./clonesessioncreator')(execlib.lib, ret);
