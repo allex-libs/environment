@@ -153,7 +153,6 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
 
   EnvironmentBase.prototype.isEstablished = function () { return this.state === 'established';}
   EnvironmentBase.prototype.toDataSource = function (desc) {
-    var ret;
     if (!desc.name) {
       throw new lib.JSONizingError('NO_DATASOURCE_NAME', desc, 'No name:');
     }

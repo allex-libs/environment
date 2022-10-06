@@ -73,34 +73,31 @@ function createLoginJob (lib, mixins, mylib) {
       return;
     }
     if (!response) {
-      this.destroyable.giveUp(this.credentials, this);
+      this.giveUp('No response from letMeIn');
       return;
     }
-    if (response) {
-      if (response.error) {
-        console.log('response.error', response.error);
-        if (response.error==='NO_TARGETS_YET' || response.error==='NO_DB_YET') {
-          lib.runNext(this.doDaLetMeIn.bind(this), this.heartbeat*10);
-          //this.reject(response.error);
-          return;
-        }
-      }
-      if (response.secondphase) {
-        this.destroyable.secondphasesessionid = response.secondphase;
-        this.destroyable.delFromStorage(remoteStorageName, 'sessionid').then (
-          this.resolve.bind(this, this.destroyable.set('state', 'secondphase')) //yes, 'state' is set immediately
-        );
+    if (response.error) {
+      console.log('response.error', response.error);
+      if (response.error==='NO_TARGETS_YET' || response.error==='NO_DB_YET') {
+        lib.runNext(this.doDaLetMeIn.bind(this), this.heartbeat*10);
+        //this.reject(response.error);
         return;
       }
-      if (!(response.ipaddress && response.port && response.session)) {
-        this.destroyable.giveUp(this.credentials, this);
-        return;
-      }
-      this.letmeinresponse = response;
-      this.acquireSinkOnHotel();
+    }
+    if (response.secondphase) {
+      this.destroyable.secondphasesessionid = response.secondphase;
+      this.destroyable.delFromStorage(remoteStorageName, 'sessionid').then (
+        this.resolve.bind(this, this.destroyable.set('state', 'secondphase')) //yes, 'state' is set immediately
+      );
       return;
     }
-    this.destroyable.giveUp(this.credentials, this);
+    if (!(response.ipaddress && response.port && response.session)) {
+      this.giveUp('No crucial data in letMeIn response');
+      return;
+    }
+    this.letmeinresponse = response;
+    this.acquireSinkOnHotel();
+    return;
   };
   LoginJob.prototype.onLetMeInRequestFail = function (reason) {
     if (!this.okToProceed()) {
@@ -200,6 +197,10 @@ function createLoginJob (lib, mixins, mylib) {
     if (!this.okToProceed()) {
       return;
     }
+  };
+  LoginJob.prototype.giveUp = function (reasontxt) {
+    this.destroyable.giveUp(this.credentials, this);
+    this.reject(new lib.Error('HAD_TO_GIVE_UP', reasontxt));
   };
 
   mylib.LoginJob = LoginJob;

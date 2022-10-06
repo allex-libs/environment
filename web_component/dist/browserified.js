@@ -298,7 +298,6 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
 
   EnvironmentBase.prototype.isEstablished = function () { return this.state === 'established';}
   EnvironmentBase.prototype.toDataSource = function (desc) {
-    var ret;
     if (!desc.name) {
       throw new lib.JSONizingError('NO_DATASOURCE_NAME', desc, 'No name:');
     }
@@ -2282,7 +2281,18 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     return this._callWebMethod('usernameExists', datahash);
   };
   AllexRemoteEnvironment.prototype.login = function (credentials, defer, entrypointmethod) {
-    return this.jobs.run('.', new jobs.LoginJob(this, remoteStorageName, protocolSecurer, letMeInHeartBeat, credentials, entrypointmethod, defer));
+    return this.jobs.run(
+      '.',
+      new jobs.LoginJob(
+        this,
+        remoteStorageName,
+        protocolSecurer,
+        letMeInHeartBeat,
+        credentials,
+        entrypointmethod,
+        defer
+      )
+    );
   };
   AllexRemoteEnvironment.prototype.findSink = function (sinkname) {
     if (!this.userRepresentation) {
@@ -2328,14 +2338,13 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     this.loginData = null;
     this.secondphasesessionid = null;
     this.set('state', 'loggedout');
+    this.set('connectionAttempt', null);
     this.delFromStorage(remoteStorageName, 'sessionid').then (
       defer.reject.bind(defer, new lib.JSONizingError('INVALID_LOGIN', credentials, 'Invalid'))
     );
   };
   AllexRemoteEnvironment.prototype.logout = function () {
     if (!this.sessionid) return;
-
-    console.log('will logout');
     this.set('state', 'pending');
     this.purgeHotelSinkDestroyedListener();
     this.purgeApartmentSinkDestroyedListener();
@@ -2849,34 +2858,31 @@ function createLoginJob (lib, mixins, mylib) {
       return;
     }
     if (!response) {
-      this.destroyable.giveUp(this.credentials, this);
+      this.giveUp('No response from letMeIn');
       return;
     }
-    if (response) {
-      if (response.error) {
-        console.log('response.error', response.error);
-        if (response.error==='NO_TARGETS_YET' || response.error==='NO_DB_YET') {
-          lib.runNext(this.doDaLetMeIn.bind(this), this.heartbeat*10);
-          //this.reject(response.error);
-          return;
-        }
-      }
-      if (response.secondphase) {
-        this.destroyable.secondphasesessionid = response.secondphase;
-        this.destroyable.delFromStorage(remoteStorageName, 'sessionid').then (
-          this.resolve.bind(this, this.destroyable.set('state', 'secondphase')) //yes, 'state' is set immediately
-        );
+    if (response.error) {
+      console.log('response.error', response.error);
+      if (response.error==='NO_TARGETS_YET' || response.error==='NO_DB_YET') {
+        lib.runNext(this.doDaLetMeIn.bind(this), this.heartbeat*10);
+        //this.reject(response.error);
         return;
       }
-      if (!(response.ipaddress && response.port && response.session)) {
-        this.destroyable.giveUp(this.credentials, this);
-        return;
-      }
-      this.letmeinresponse = response;
-      this.acquireSinkOnHotel();
+    }
+    if (response.secondphase) {
+      this.destroyable.secondphasesessionid = response.secondphase;
+      this.destroyable.delFromStorage(remoteStorageName, 'sessionid').then (
+        this.resolve.bind(this, this.destroyable.set('state', 'secondphase')) //yes, 'state' is set immediately
+      );
       return;
     }
-    this.destroyable.giveUp(this.credentials, this);
+    if (!(response.ipaddress && response.port && response.session)) {
+      this.giveUp('No crucial data in letMeIn response');
+      return;
+    }
+    this.letmeinresponse = response;
+    this.acquireSinkOnHotel();
+    return;
   };
   LoginJob.prototype.onLetMeInRequestFail = function (reason) {
     if (!this.okToProceed()) {
@@ -2976,6 +2982,10 @@ function createLoginJob (lib, mixins, mylib) {
     if (!this.okToProceed()) {
       return;
     }
+  };
+  LoginJob.prototype.giveUp = function (reasontxt) {
+    this.destroyable.giveUp(this.credentials, this);
+    this.reject(new lib.Error('HAD_TO_GIVE_UP', reasontxt));
   };
 
   mylib.LoginJob = LoginJob;

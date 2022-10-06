@@ -305,7 +305,18 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     return this._callWebMethod('usernameExists', datahash);
   };
   AllexRemoteEnvironment.prototype.login = function (credentials, defer, entrypointmethod) {
-    return this.jobs.run('.', new jobs.LoginJob(this, remoteStorageName, protocolSecurer, letMeInHeartBeat, credentials, entrypointmethod, defer));
+    return this.jobs.run(
+      '.',
+      new jobs.LoginJob(
+        this,
+        remoteStorageName,
+        protocolSecurer,
+        letMeInHeartBeat,
+        credentials,
+        entrypointmethod,
+        defer
+      )
+    );
   };
   AllexRemoteEnvironment.prototype.findSink = function (sinkname) {
     if (!this.userRepresentation) {
@@ -351,14 +362,13 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     this.loginData = null;
     this.secondphasesessionid = null;
     this.set('state', 'loggedout');
+    this.set('connectionAttempt', null);
     this.delFromStorage(remoteStorageName, 'sessionid').then (
       defer.reject.bind(defer, new lib.JSONizingError('INVALID_LOGIN', credentials, 'Invalid'))
     );
   };
   AllexRemoteEnvironment.prototype.logout = function () {
     if (!this.sessionid) return;
-
-    console.log('will logout');
     this.set('state', 'pending');
     this.purgeHotelSinkDestroyedListener();
     this.purgeApartmentSinkDestroyedListener();
