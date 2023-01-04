@@ -2024,13 +2024,14 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     return ret;
   };
   AllexRemoteCommand.prototype.onSink = function (args, sink) {
-    console.log('calling', arguments);
     var d, ret;
     if (!this.sessionlevel) {
+      console.log('calling', this.methodname, arguments);
       return sink.call.apply(sink, [this.methodname].concat(args));
     }
     d = q.defer();
     ret = d.promise;
+    console.log('calling sessionMethod', this.methodname, arguments);
     taskRegistry.run('invokeSessionMethod', {
       sink: sink,
       methodname: this.methodname,
