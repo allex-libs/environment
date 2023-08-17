@@ -1182,6 +1182,9 @@ function createAllexStateDataSource (execlib, dataSourceRegistry) {
         this.target.set('data', null);
       }
     } else {
+      if (lib.isEqual(this.target.get('data'), data)) {
+        return;
+      }
       this.target.set('data', data);
     }
   };
