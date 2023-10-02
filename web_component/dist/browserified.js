@@ -2003,10 +2003,12 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     this.representation = null;
     this.methodname = options.name;
     this.sessionlevel = !!options.session;
+    this.executionReporter = lib.isFunction(options.onExecution) ? options.onExecution : lib.dummyFunc;
     this.setRepresentation(representation, options.sink);
   }
   lib.inherit(AllexRemoteCommand, CommandBase);
   AllexRemoteCommand.prototype.destroy = function () {
+    this.executionReporter = null;
     this.sessionlevel = null;
     this.methodname = null;
     this.representation = null;
@@ -2027,6 +2029,38 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     return ret;
   };
   AllexRemoteCommand.prototype.onSink = function (args, sink) {
+    var promise = this.produceExecutionPromise(args, sink);
+    var execobj = {
+      name: this.methodname,
+      sessionlevel: this.sessionlevel,
+      args: args,
+      started: Date.now(),
+      result: void 0,
+      error: void 0,
+      progress: [],
+      finished: null,
+      seen: false
+    };
+    this.executionReporter(true, execobj);
+    promise.done(this.onResolved.bind(this, execobj), this.onRejected.bind(this, execobj), this.onProgress.bind(this, execobj));
+    execobj = null;
+    return promise;
+  };
+  AllexRemoteCommand.prototype.onResolved = function (execobj, result) {
+    execobj.finished = Date.now();
+    execobj.result = result;
+    this.executionReporter(false, execobj);
+  };
+  AllexRemoteCommand.prototype.onRejected = function (execobj, reason) {
+    execobj.finished = Date.now();
+    execobj.error = reason;
+    this.executionReporter(false, execobj);
+  };
+  AllexRemoteCommand.prototype.onProgress = function (execobj, progress) {
+    execobj.progress.push(progress);
+    this.executionReporter(false, execobj);
+  };
+  AllexRemoteCommand.prototype.produceExecutionPromise = function (args, sink) {
     var d, ret;
     if (!this.sessionlevel) {
       console.log('calling', this.methodname, arguments);
@@ -2076,14 +2110,9 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     this._current = null;
     AllexRemoteDataCommand.prototype.destroy.call(this);
   };
-  
-  AllexAggregateDataCommand.prototype.onSink = function (args, sink) {
-    var promise = AllexRemoteDataCommand.prototype.onSink.call(this, args, sink);
-    promise.done (null, null, this._onProgress.bind(this));
-    return promise;
-  };
 
-  AllexAggregateDataCommand.prototype._onProgress = function (data) {
+  AllexAggregateDataCommand.prototype.onProgress = function (execobj, data) {
+    AllexRemoteDataCommand.prototype.onProgress.call(this, execobj, data);
     switch (data[0]) {
       case 'rb' : {
         this._processBegin(data[1]);
@@ -2180,16 +2209,9 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     AllexRemoteDataCommand.call(this, representation, options);
   }
   lib.inherit(AllexDataResolvingDataCommand, AllexRemoteDataCommand);
-  AllexDataResolvingDataCommand.prototype.onSink = function (args, sink) {
-    var promise = AllexRemoteDataCommand.prototype.onSink.call(this, args, sink);
-    promise.done(this.onResolved.bind(this), this.onFailed.bind(this));
-    return promise;
-  };
-  AllexDataResolvingDataCommand.prototype.onResolved = function (data) {
+  AllexDataResolvingDataCommand.prototype.onResolved = function (execobj, data) {
+    AllexRemoteDataCommand.prototype.onResolved.call(this, execobj, data);
     this.waiter.setData(data);
-  };
-  AllexDataResolvingDataCommand.prototype.onFailed = function (reason) {
-    console.error(this.methodname, 'encountered an error', reason);
   };
 
   function AllexRemoteEnvironment (options) {
@@ -2211,12 +2233,14 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     this.sessionid = null;
     this.secondphasesessionid = null;
     this.connectionAttempt = null;
+    this.executionLog = [];
     this.checkForSessionId();
     this.createStorage(remoteStorageName);
   }
   lib.inherit(AllexRemoteEnvironment, AllexEnvironment);
   HotelAndApartmentHandlerMixin.addMethods(AllexRemoteEnvironment);
   AllexRemoteEnvironment.prototype.destroy = function () {
+    this.executionLog = null;
     this.connectionAttempt = null;     
     this.secondphasesessionid = null;
     this.sessionid = null;
@@ -2308,7 +2332,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     return q(this.userRepresentation.subsinks[sinkname]);
   };
   AllexRemoteEnvironment.prototype.createCommand = function (options) {
-    var baseret, ctor;
+    var ctor, ret;
     try {
       return AllexEnvironment.prototype.createCommand.call(this, options);
     } catch (ignore) {}
@@ -2322,7 +2346,9 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
       throw new lib.JSONizingError ('NO_NAME_IN_OPTIONS', options, 'No name:');
     }
     ctor = this.chooseCommandCtor(options.type);
-    return new ctor(this.userRepresentation, options);
+    options.onExecution = this.onExecution.bind(this);
+    ret = new ctor(this.userRepresentation, options);
+    return ret;
   };
   AllexRemoteEnvironment.prototype.chooseCommandCtor = function (type) {
     switch (type) {
@@ -2335,6 +2361,13 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
       default:
         return AllexRemoteCommand;
     }
+  };
+  AllexRemoteEnvironment.prototype.onExecution = function (isnew, obj) {
+    if (isnew) {
+      this.set('executionLog', (this.executionLog||[]).concat([obj]));
+      return;
+    }
+    this.set('executionLog', (this.executionLog||[]).slice());
   };
 
   AllexRemoteEnvironment.prototype.giveUp = function (credentials, defer) {
