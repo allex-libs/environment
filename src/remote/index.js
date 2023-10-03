@@ -390,6 +390,17 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     }
     this.set('executionLog', (this.executionLog||[]).slice());
   };
+  AllexRemoteEnvironment.prototype.clearExecutionLog = function (options) {
+    this.set('executionLog', this.executionLog.reduce(execLogClearer, {options: options, res:[]}.res));
+  };
+  function execLogClearer (res, line) {
+    var takeline = !line.finished || 
+      (res.options && res.options.keeperrors && line.error);
+    if (takeline) {
+      res.push(line);
+    }
+    return res;
+  }
 
   AllexRemoteEnvironment.prototype.giveUp = function (credentials, defer) {
     this.pendingRequest = 0;
