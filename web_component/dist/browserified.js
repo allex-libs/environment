@@ -2029,7 +2029,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     return ret;
   };
   AllexRemoteCommand.prototype.onSink = function (args, sink) {
-    var promise = this.produceExecutionPromise(args, sink);
+    var promise;
     var execobj = {
       name: this.methodname,
       sessionlevel: this.sessionlevel,
@@ -2042,6 +2042,12 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
       seen: false
     };
     this.executionReporter(true, execobj);
+    try {
+      promise = this.produceExecutionPromise(args, sink);
+    } catch (e) {
+      this.onRejected(execobj, e);
+      return;
+    }
     promise.done(this.onResolved.bind(this, execobj), this.onRejected.bind(this, execobj), this.onProgress.bind(this, execobj));
     execobj = null;
     return promise;
@@ -2364,11 +2370,31 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
   };
   AllexRemoteEnvironment.prototype.onExecution = function (isnew, obj) {
     if (isnew) {
-      this.set('executionLog', (this.executionLog||[]).concat([obj]));
+      this.set('executionLog', (this.executionLog||[]).reduce(execLogLimiter, []).concat([obj]));
       return;
     }
     this.set('executionLog', (this.executionLog||[]).slice());
   };
+  var _MAXEXECLOGLENGTHMINUS2 = 23;
+  function execLogLimiter (res, line) {
+    if (res.length>_MAXEXECLOGLENGTHMINUS2) {
+      removeNonErrorFrom(res);
+    }
+    res.push(line);
+    return res;
+  }
+  function removeNonErrorFrom (arry) {
+    var i;
+    if (!lib.isArray(arry)) {
+      return;
+    }
+    for (i=0; i<arry.length; i++) {
+      if (!arry[i].error) {
+        arry.splice(i, 1);
+        return;
+      }
+    }
+  }
   AllexRemoteEnvironment.prototype.clearExecutionLog = function (options) {
     this.set('executionLog', this.executionLog.reduce(execLogClearer, {options: options, res:[]}.res));
   };
