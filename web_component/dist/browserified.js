@@ -2396,13 +2396,16 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     }
   }
   AllexRemoteEnvironment.prototype.clearExecutionLog = function (options) {
-    this.set('executionLog', this.executionLog.reduce(execLogClearer, {options: options, res:[]}.res));
+    this.set('executionLog', this.executionLog.reduce(execLogClearer, {options: options, res:[]}).res);
+  };
+  AllexRemoteEnvironment.prototype.markErrorSeen = function (record) {
+    this.set('executionLog', this.executionLog.slice());
   };
   function execLogClearer (res, line) {
     var takeline = !line.finished || 
       (res.options && res.options.keeperrors && line.error);
     if (takeline) {
-      res.push(line);
+      res.res.push(line);
     }
     return res;
   }
