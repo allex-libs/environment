@@ -9,8 +9,9 @@ function createEnvironmentFactory (execlib, leveldblib, UserRepresentation) {
     environmentRegistry = new EnvironmentRegistry();
 
   
-  require('./basecreator')(execlib, leveldblib, dataSourceRegistry, environmentRegistry),
-  require('./allexcreator')(execlib, environmentRegistry, CommandBase),
+  require('./basecreator')(execlib, leveldblib, dataSourceRegistry, environmentRegistry);
+  require('./allexcreator')(execlib, environmentRegistry, CommandBase);
+  require('./local')(execlib, environmentRegistry);
   require('./remote')(execlib, environmentRegistry, UserRepresentation, CommandBase);
 
 

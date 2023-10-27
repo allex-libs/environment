@@ -58,6 +58,7 @@ function createAllexEnvironment (execlib, environmentRegistry, CommandBase) {
 
   AllexEnvironment.prototype.createSinkLessSource = function (type, options, name) {
     var ctor;
+    options = options || {};
     switch (type) {
       case 'jsdata': 
         options.env_storage = {
@@ -97,7 +98,7 @@ function createAllexEnvironment (execlib, environmentRegistry, CommandBase) {
       d = null;
     });
     promises.push(d.promise);
-  }
+  };
 
   AllexEnvironment.prototype.createMultiSinkDataSource = function (ctor, options) {
     var promises = [], sinks = {}, _p = promises, _s = sinks;

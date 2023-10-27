@@ -68,6 +68,7 @@ function createAllexEnvironment (execlib, environmentRegistry, CommandBase) {
 
   AllexEnvironment.prototype.createSinkLessSource = function (type, options, name) {
     var ctor;
+    options = options || {};
     switch (type) {
       case 'jsdata': 
         options.env_storage = {
@@ -107,7 +108,7 @@ function createAllexEnvironment (execlib, environmentRegistry, CommandBase) {
       d = null;
     });
     promises.push(d.promise);
-  }
+  };
 
   AllexEnvironment.prototype.createMultiSinkDataSource = function (ctor, options) {
     var promises = [], sinks = {}, _p = promises, _s = sinks;
@@ -1885,8 +1886,9 @@ function createEnvironmentFactory (execlib, leveldblib, UserRepresentation) {
     environmentRegistry = new EnvironmentRegistry();
 
   
-  require('./basecreator')(execlib, leveldblib, dataSourceRegistry, environmentRegistry),
-  require('./allexcreator')(execlib, environmentRegistry, CommandBase),
+  require('./basecreator')(execlib, leveldblib, dataSourceRegistry, environmentRegistry);
+  require('./allexcreator')(execlib, environmentRegistry, CommandBase);
+  require('./local')(execlib, environmentRegistry);
   require('./remote')(execlib, environmentRegistry, UserRepresentation, CommandBase);
 
 
@@ -1926,7 +1928,21 @@ function createEnvironmentFactory (execlib, leveldblib, UserRepresentation) {
 module.exports = createEnvironmentFactory;
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./allexcreator":2,"./basecreator":3,"./commandbasecreator":4,"./datasources":15,"./registrycreator":22,"./remote":23}],22:[function(require,module,exports){
+},{"./allexcreator":2,"./basecreator":3,"./commandbasecreator":4,"./datasources":15,"./local":22,"./registrycreator":23,"./remote":24}],22:[function(require,module,exports){
+function createLocalEnvironment (execlib, environmentRegistry) {
+  'use strict';
+  var lib = execlib.lib,
+    AllexEnvironment = environmentRegistry.get('allexbase');
+
+  function AllexLocalEnvironment (options) {
+    AllexEnvironment.call(this, options);
+    this.state = 'established';
+  }
+  lib.inherit(AllexLocalEnvironment, AllexEnvironment);
+  environmentRegistry.register('allexlocal', AllexLocalEnvironment);
+}
+module.exports = createLocalEnvironment;
+},{}],23:[function(require,module,exports){
 function createRegistries (lib) {
   'use strict';
 
@@ -1976,7 +1992,7 @@ function createRegistries (lib) {
 
 module.exports = createRegistries;
 
-},{}],23:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 function protocolSecurer (protocol) {
     if ('undefined' !== typeof window && window.location && window.location.protocol && window.location.protocol.indexOf('https') >=0) {
       return protocol+'s';
@@ -2504,7 +2520,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
 
 module.exports = createAllexRemoteEnvironment;
 
-},{"./remotejobs":30,"./remotemixins":35}],24:[function(require,module,exports){
+},{"./remotejobs":31,"./remotemixins":36}],25:[function(require,module,exports){
 function createAcquireSinkOnHotelJob (execlib, mylib) {
   'use strict';
 
@@ -2557,7 +2573,7 @@ function createAcquireSinkOnHotelJob (execlib, mylib) {
 }
 module.exports = createAcquireSinkOnHotelJob;
 
-},{}],25:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 function createAcquireUserSinkJob (execlib, mylib) {
   'use strict';
 
@@ -2606,7 +2622,7 @@ function createAcquireUserSinkJob (execlib, mylib) {
 }
 module.exports = createAcquireUserSinkJob;
 
-},{}],26:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 function createCheckSessionJob (lib, mylib) {
   'use strict';
   var q = lib.q,
@@ -2675,7 +2691,7 @@ function createCheckSessionJob (lib, mylib) {
 }
 module.exports = createCheckSessionJob;
 
-},{}],27:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 function createCloneSessionJob (lib, mylib) {
   'use strict';
 
@@ -2703,7 +2719,7 @@ function createCloneSessionJob (lib, mylib) {
   mylib.CloneSessionJob = CloneSessionJob;
 }
 module.exports = createCloneSessionJob;
-},{}],28:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 function createEntryPointCallerJob (lib, mylib) {
   'use strict';
 
@@ -2765,7 +2781,7 @@ function createEntryPointCallerJob (lib, mylib) {
   mylib.EntryPointCallerJob = EntryPointCallerJob;
 }
 module.exports = createEntryPointCallerJob;
-},{}],29:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 function createJobHelpers (lib, outerlib) {
   'use strict';
 
@@ -2784,7 +2800,7 @@ function createJobHelpers (lib, outerlib) {
   outerlib.helpers = mylib;
 }
 module.exports = createJobHelpers;
-},{}],30:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 function createRemoteJobs (execlib, mixins) {
   'use strict';
 
@@ -2803,7 +2819,7 @@ function createRemoteJobs (execlib, mixins) {
 }
 module.exports = createRemoteJobs;
 
-},{"./acquiresinkonhotelcreator":24,"./acquireusersinkcreator":25,"./checksessioncreator":26,"./clonesessioncreator":27,"./entrypointcallercreator":28,"./helpers":29,"./letmeincreator":31,"./logincreator":32,"./onenvironmentcreator":33}],31:[function(require,module,exports){
+},{"./acquiresinkonhotelcreator":25,"./acquireusersinkcreator":26,"./checksessioncreator":27,"./clonesessioncreator":28,"./entrypointcallercreator":29,"./helpers":30,"./letmeincreator":32,"./logincreator":33,"./onenvironmentcreator":34}],32:[function(require,module,exports){
 function createLetMeInJob (execlib, mylib) {
   'use strict';
 
@@ -2859,7 +2875,7 @@ function createLetMeInJob (execlib, mylib) {
 }
 module.exports = createLetMeInJob;
 
-},{}],32:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 function createLoginJob (lib, mixins, mylib) {
   'use strict';
 
@@ -3069,7 +3085,7 @@ function createLoginJob (lib, mixins, mylib) {
 }
 module.exports = createLoginJob;
 
-},{}],33:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 function createJobOnEnvironment (lib, mylib) {
   'use strict';
   var q = lib.q,
@@ -3088,7 +3104,7 @@ function createJobOnEnvironment (lib, mylib) {
 }
 module.exports = createJobOnEnvironment;
 
-},{}],34:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 function createHotelAndApartmentSinkHandlerMixin (lib) {
   'use strict';
 
@@ -3167,7 +3183,7 @@ function createHotelAndApartmentSinkHandlerMixin (lib) {
 }
 module.exports = createHotelAndApartmentSinkHandlerMixin;
 
-},{}],35:[function(require,module,exports){
+},{}],36:[function(require,module,exports){
 function createMixins (lib) {
   'use strict';
 
@@ -3177,4 +3193,4 @@ function createMixins (lib) {
 }
 module.exports = createMixins;
 
-},{"./hotelandapartmentsinkhandlercreator":34}]},{},[1]);
+},{"./hotelandapartmentsinkhandlercreator":35}]},{},[1]);
