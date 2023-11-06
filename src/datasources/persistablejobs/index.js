@@ -83,6 +83,10 @@ function createPersistableJobs (lib) {
     this.data = null;
     JobOnPersistable.prototype.destroy.call(this);
   };
+  SetDataJob.prototype.reject = function (reason) {
+    console.error(reason);
+    return JobOnPersistable.prototype.reject.call(this, reason);
+  };
   SetDataJob.prototype.go = function () {
     var ok = this.okToGo();
     if (!ok.ok) {

@@ -200,14 +200,15 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
   };
   function unregisterer(dss, ds, dsname) {
     dss.unregisterDestroyable(dsname);
+    return dss;
   }
   EnvironmentBase.prototype.onDeEstablished = function () {
     var dss = this.dataSources, cmds = this.commands;
     if (dss) {
-      dss.traverse(unregisterer.bind(null, dss));
+      dss.reduce(unregisterer, dss);
     }
     if (cmds) {
-      cmds.traverse(unregisterer.bind(null, cmds));
+      cmds.reduce(unregisterer, cmds);
     }
     dss = null;
     cmds = null;

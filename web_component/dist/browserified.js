@@ -346,14 +346,15 @@ function createEnvironmentBase (execlib, leveldblib, DataSourceRegistry, environ
   };
   function unregisterer(dss, ds, dsname) {
     dss.unregisterDestroyable(dsname);
+    return dss;
   }
   EnvironmentBase.prototype.onDeEstablished = function () {
     var dss = this.dataSources, cmds = this.commands;
     if (dss) {
-      dss.traverse(unregisterer.bind(null, dss));
+      dss.reduce(unregisterer, dss);
     }
     if (cmds) {
-      cmds.traverse(unregisterer.bind(null, cmds));
+      cmds.reduce(unregisterer, cmds);
     }
     dss = null;
     cmds = null;
@@ -1628,6 +1629,10 @@ function createPersistableJobs (lib) {
   SetDataJob.prototype.destroy = function () {
     this.data = null;
     JobOnPersistable.prototype.destroy.call(this);
+  };
+  SetDataJob.prototype.reject = function (reason) {
+    console.error(reason);
+    return JobOnPersistable.prototype.reject.call(this, reason);
   };
   SetDataJob.prototype.go = function () {
     var ok = this.okToGo();
