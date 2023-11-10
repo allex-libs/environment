@@ -1,8 +1,13 @@
-function protocolSecurer (protocol) {
+function protocolSer (protocol) {
     if ('undefined' !== typeof window && window.location && window.location.protocol && window.location.protocol.indexOf('https') >=0) {
       return protocol+'s';
     }
     return protocol;
+}
+function urlMaker (protocol, address, port, methodname) {
+  var slashind = address.indexOf('/');
+  var myaddr = slashind>=0 ? address.substring(0, slashind) + ':' + port + address.substring(slashind) : address+':'+port;
+  return protocolSer(protocol)+'://'+myaddr+(methodname ? '/'+methodname : '');
 }
 
 function createAllexRemoteEnvironment (execlib, environmentRegistry, UserRepresentation, CommandBase) {
@@ -305,7 +310,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     );
   };
   AllexRemoteEnvironment.prototype.cloneSession = function (sessionid) {
-    return this.jobs.run('.', new jobs.CloneSessionJob(this, protocolSecurer, {__sessions__id: sessionid.sessionid}));
+    return this.jobs.run('.', new jobs.CloneSessionJob(this, urlMaker, {__sessions__id: sessionid.sessionid}));
   };
 
   function webMethodResolver(defer,res){
@@ -321,7 +326,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
   }
   AllexRemoteEnvironment.prototype._callWebMethod = function (methodname, datahash) {
     var d = q.defer();
-    lib.request(protocolSecurer('http')+'://'+this.address+':'+this.port+'/'+methodname, {
+    lib.request(urlMaker('http', this.address, this.port, methodname), {
       parameters: datahash,
       onComplete: webMethodResolver.bind(null,d),
       onError: d.reject.bind(d)
@@ -341,7 +346,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
       new jobs.LoginJob(
         this,
         remoteStorageName,
-        protocolSecurer,
+        urlMaker,
         letMeInHeartBeat,
         credentials,
         entrypointmethod,
@@ -451,7 +456,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
 
   AllexRemoteEnvironment.prototype.sendLetMeOutRequest = function (credentials, d) {
     d = d || q.defer();
-    lib.request(protocolSecurer('http')+'://'+this.address+':'+this.port+'/letMeOut', {
+    lib.request(urlMaker('http', this.address, this.port, 'letMeOut'), {
       parameters: credentials,
       onComplete: this.onLetMeOutResponse.bind(this, credentials, d),
       onError: this.onLetMeOutRequestFail.bind(this, credentials, d)

@@ -6,8 +6,8 @@ function createLetMeInJob (execlib, mylib) {
     qlib = lib.qlib,
     EntryPointCallerJob = mylib.EntryPointCallerJob;
 
-  function LetMeInJob (env, protocolsecurer, heartbeat, credentials, entrypointmethod, defer) {
-    EntryPointCallerJob.call(this, env, protocolsecurer, credentials, entrypointmethod, defer);
+  function LetMeInJob (env, urlmaker, heartbeat, credentials, entrypointmethod, defer) {
+    EntryPointCallerJob.call(this, env, urlmaker, credentials, entrypointmethod, defer);
     this.heartbeat = heartbeat;
   }
   lib.inherit(LetMeInJob, EntryPointCallerJob);
@@ -34,13 +34,6 @@ function createLetMeInJob (execlib, mylib) {
     if (!this.okToProceed()) {
       return;
     }
-    /*
-    lib.request(this.protocolsecurer('http')+'://'+this.destroyable.address+':'+this.destroyable.port+'/'+ (this.entrypointmethod || 'letMeIn'), {
-      parameters: this.credentials,
-      onComplete: this.onLetMeInResponse.bind(this),
-      onError: this.reject.bind(this)
-    });
-    */
     this.doTheCall();
     lib.runNext(this.onStale.bind(this), 10*this.heartbeat);
   };

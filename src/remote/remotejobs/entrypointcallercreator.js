@@ -5,9 +5,9 @@ function createEntryPointCallerJob (lib, mylib) {
     qlib = lib.qlib,
     JobOnEnvironment = mylib.JobOnEnvironment;
 
-  function EntryPointCallerJob (env, protocolsecurer, credentials, entrypointmethod, defer) {
+  function EntryPointCallerJob (env, urlmaker, credentials, entrypointmethod, defer) {
     JobOnEnvironment.call(this, env, defer);
-    this.protocolsecurer = protocolsecurer;
+    this.urlMaker = urlmaker;
     this.credentials = credentials;
     this.entrypointmethod = entrypointmethod;
   }
@@ -15,12 +15,12 @@ function createEntryPointCallerJob (lib, mylib) {
   EntryPointCallerJob.prototype.destroy = function () {
     this.entrypointmethod = null;
     this.credentials = null;
-    this.protocolsecurer = null;
+    this.urlMaker = null;
     JobOnEnvironment.prototype.destroy.call(this);
   };
 
   EntryPointCallerJob.prototype.doTheCall = function (callobj) {
-    var url = this.protocolsecurer('http')+'://'+this.destroyable.address+':'+this.destroyable.port+'/'+ (this.entrypointmethod || 'letMeIn');
+    var url = this.urlMaker('http', this.destroyable.address, this.destroyable.port, this.entrypointmethod || 'letMeIn');
     lib.request(url, {
       parameters: this.credentials,
       onComplete: this.onEntryPointResponse.bind(this),

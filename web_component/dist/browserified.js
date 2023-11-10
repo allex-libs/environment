@@ -1998,11 +1998,16 @@ function createRegistries (lib) {
 module.exports = createRegistries;
 
 },{}],24:[function(require,module,exports){
-function protocolSecurer (protocol) {
+function protocolSer (protocol) {
     if ('undefined' !== typeof window && window.location && window.location.protocol && window.location.protocol.indexOf('https') >=0) {
       return protocol+'s';
     }
     return protocol;
+}
+function urlMaker (protocol, address, port, methodname) {
+  var slashind = address.indexOf('/');
+  var myaddr = slashind>=0 ? address.substring(0, slashind) + ':' + port + address.substring(slashind) : address+':'+port;
+  return protocolSer(protocol)+'://'+myaddr+(methodname ? '/'+methodname : '');
 }
 
 function createAllexRemoteEnvironment (execlib, environmentRegistry, UserRepresentation, CommandBase) {
@@ -2305,7 +2310,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
     );
   };
   AllexRemoteEnvironment.prototype.cloneSession = function (sessionid) {
-    return this.jobs.run('.', new jobs.CloneSessionJob(this, protocolSecurer, {__sessions__id: sessionid.sessionid}));
+    return this.jobs.run('.', new jobs.CloneSessionJob(this, urlMaker, {__sessions__id: sessionid.sessionid}));
   };
 
   function webMethodResolver(defer,res){
@@ -2321,7 +2326,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
   }
   AllexRemoteEnvironment.prototype._callWebMethod = function (methodname, datahash) {
     var d = q.defer();
-    lib.request(protocolSecurer('http')+'://'+this.address+':'+this.port+'/'+methodname, {
+    lib.request(urlMaker('http', this.address, this.port, methodname), {
       parameters: datahash,
       onComplete: webMethodResolver.bind(null,d),
       onError: d.reject.bind(d)
@@ -2341,7 +2346,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
       new jobs.LoginJob(
         this,
         remoteStorageName,
-        protocolSecurer,
+        urlMaker,
         letMeInHeartBeat,
         credentials,
         entrypointmethod,
@@ -2451,7 +2456,7 @@ function createAllexRemoteEnvironment (execlib, environmentRegistry, UserReprese
 
   AllexRemoteEnvironment.prototype.sendLetMeOutRequest = function (credentials, d) {
     d = d || q.defer();
-    lib.request(protocolSecurer('http')+'://'+this.address+':'+this.port+'/letMeOut', {
+    lib.request(urlMaker('http', this.address, this.port, 'letMeOut'), {
       parameters: credentials,
       onComplete: this.onLetMeOutResponse.bind(this, credentials, d),
       onError: this.onLetMeOutRequestFail.bind(this, credentials, d)
@@ -2534,9 +2539,9 @@ function createAcquireSinkOnHotelJob (execlib, mylib) {
     qlib = lib.qlib,
     JobOnEnvironment = mylib.JobOnEnvironment;
 
-  function AcquireSinkOnHotelJob (env, protocolsecurer, params, defer) {
+  function AcquireSinkOnHotelJob (env, urlmaker, params, defer) {
     JobOnEnvironment.call(this, env, defer);
-    this.protocolsecurer = protocolsecurer;
+    this.urlMaker = urlmaker;
     this.params = params;
     this.task = null;
   }
@@ -2547,7 +2552,7 @@ function createAcquireSinkOnHotelJob (execlib, mylib) {
     }
     this.task = null;
     this.params = null;
-    this.protocolsecurer = null;
+    this.urlMaker = null;
     JobOnEnvironment.prototype.destroy.call(this);
   };
   AcquireSinkOnHotelJob.prototype.go = function () {
@@ -2559,13 +2564,13 @@ function createAcquireSinkOnHotelJob (execlib, mylib) {
     return ok.val;
   };
   AcquireSinkOnHotelJob.prototype.doDaAcquire = function () {
-    var protocol = this.protocolsecurer('http');
+    //var protocol = this.urlMaker('http');
     if (this.task) {
       this.task.destroy();
     }
 
     this.task = execlib.execSuite.taskRegistry.run('acquireSink', {
-      connectionString: protocol+'://'+this.params.ipaddress+':'+this.params.port,
+      connectionString: this.urlMaker('http', this.params.ipaddress, this.params.port),
       session: this.params.session,
       onSink: this.resolve.bind(this),
       onCannotConnect : this.reject.bind(this),
@@ -2732,9 +2737,9 @@ function createEntryPointCallerJob (lib, mylib) {
     qlib = lib.qlib,
     JobOnEnvironment = mylib.JobOnEnvironment;
 
-  function EntryPointCallerJob (env, protocolsecurer, credentials, entrypointmethod, defer) {
+  function EntryPointCallerJob (env, urlmaker, credentials, entrypointmethod, defer) {
     JobOnEnvironment.call(this, env, defer);
-    this.protocolsecurer = protocolsecurer;
+    this.urlMaker = urlmaker;
     this.credentials = credentials;
     this.entrypointmethod = entrypointmethod;
   }
@@ -2742,12 +2747,12 @@ function createEntryPointCallerJob (lib, mylib) {
   EntryPointCallerJob.prototype.destroy = function () {
     this.entrypointmethod = null;
     this.credentials = null;
-    this.protocolsecurer = null;
+    this.urlMaker = null;
     JobOnEnvironment.prototype.destroy.call(this);
   };
 
   EntryPointCallerJob.prototype.doTheCall = function (callobj) {
-    var url = this.protocolsecurer('http')+'://'+this.destroyable.address+':'+this.destroyable.port+'/'+ (this.entrypointmethod || 'letMeIn');
+    var url = this.urlMaker('http', this.destroyable.address, this.destroyable.port, this.entrypointmethod || 'letMeIn');
     lib.request(url, {
       parameters: this.credentials,
       onComplete: this.onEntryPointResponse.bind(this),
@@ -2833,8 +2838,8 @@ function createLetMeInJob (execlib, mylib) {
     qlib = lib.qlib,
     EntryPointCallerJob = mylib.EntryPointCallerJob;
 
-  function LetMeInJob (env, protocolsecurer, heartbeat, credentials, entrypointmethod, defer) {
-    EntryPointCallerJob.call(this, env, protocolsecurer, credentials, entrypointmethod, defer);
+  function LetMeInJob (env, urlmaker, heartbeat, credentials, entrypointmethod, defer) {
+    EntryPointCallerJob.call(this, env, urlmaker, credentials, entrypointmethod, defer);
     this.heartbeat = heartbeat;
   }
   lib.inherit(LetMeInJob, EntryPointCallerJob);
@@ -2861,13 +2866,6 @@ function createLetMeInJob (execlib, mylib) {
     if (!this.okToProceed()) {
       return;
     }
-    /*
-    lib.request(this.protocolsecurer('http')+'://'+this.destroyable.address+':'+this.destroyable.port+'/'+ (this.entrypointmethod || 'letMeIn'), {
-      parameters: this.credentials,
-      onComplete: this.onLetMeInResponse.bind(this),
-      onError: this.reject.bind(this)
-    });
-    */
     this.doTheCall();
     lib.runNext(this.onStale.bind(this), 10*this.heartbeat);
   };
