@@ -2004,9 +2004,29 @@ function protocolSer (protocol) {
     }
     return protocol;
 }
+function addresser (address) {
+  var tmp;
+  if (!address) {
+    return '';
+  }
+  if ('string' == typeof(address)) {
+    return address;
+  }
+  if ('undefined' !== typeof window && window.location) {
+    if ('string' == typeof(address.domainslug)) {
+      return window.location.hostname+'/'+address.domainslug;
+    }
+    if ('string' == typeof(address.urlslug)) {
+      tmp = window.location.hostname+window.location.pathname;
+      return tmp+(tmp[tmp.length-1]=='/' ? '' : '/')+address.urlslug;
+    }
+  }
+}
 function urlMaker (protocol, address, port, methodname) {
-  var slashind = address.indexOf('/');
-  var myaddr = slashind>=0 ? address.substring(0, slashind) + ':' + port + address.substring(slashind) : address+':'+port;
+  var slashind, myaddress;
+  myaddress = addresser(address);
+  slashind = myaddress.indexOf('/');
+  var myaddr = slashind>=0 ? myaddress.substring(0, slashind) + ':' + port + myaddress.substring(slashind) : myaddress+':'+port;
   return protocolSer(protocol)+'://'+myaddr+(methodname ? '/'+methodname : '');
 }
 
