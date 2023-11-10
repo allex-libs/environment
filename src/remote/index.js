@@ -22,6 +22,20 @@ function addresser (address) {
     }
   }
 }
+function porter (port) {
+  if (!port) {
+    return 80;
+  }
+  if ('number' == typeof(port)) {
+    return port;
+  }
+  if ('undefined' !== typeof window && window.location) {
+    if (!('http' in port && 'number'==typeof(port.http))) {
+      throw new Error('If the environment connection port is not a number, it has to be an object with "http" and optionally "https" properties, both Number');
+    }
+    return window.location.protocol.indexOf('https') >=0 ? port.https||443 : port.http;
+  }
+}
 function urlMaker (protocol, address, port, methodname) {
   var slashind, myaddress;
   myaddress = addresser(address);
