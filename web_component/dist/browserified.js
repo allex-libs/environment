@@ -2037,10 +2037,11 @@ function porter (port) {
   }
 }
 function urlMaker (protocol, address, port, methodname) {
-  var slashind, myaddress;
+  var slashind, myaddress, myport;
   myaddress = addresser(address);
+  myport = porter(port);
   slashind = myaddress.indexOf('/');
-  var myaddr = slashind>=0 ? myaddress.substring(0, slashind) + ':' + port + myaddress.substring(slashind) : myaddress+':'+port;
+  var myaddr = slashind>=0 ? myaddress.substring(0, slashind) + ':' + myport + myaddress.substring(slashind) : myaddress+':'+myport;
   return protocolSer(protocol)+'://'+myaddr+(methodname ? '/'+methodname : '');
 }
 
