@@ -2030,6 +2030,9 @@ function porter (port) {
     return port;
   }
   if ('undefined' !== typeof window && window.location) {
+    if ('auto' == port) {
+      window.location.protocol.indexOf('https') >=0 ? 443 : 80;
+    }
     if (!('http' in port && 'number'==typeof(port.http))) {
       throw new Error('If the environment connection port is not a number, it has to be an object with "http" and optionally "https" properties, both Number');
     }
