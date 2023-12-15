@@ -2997,11 +2997,11 @@ function createLoginJob (lib, mixins, mylib) {
     }
     if (response.error) {
       console.log('response.error', response.error);
-      if (response.error==='NO_TARGETS_YET' || response.error==='NO_DB_YET') {
+      //if (response.error==='NO_TARGETS_YET' || response.error==='NO_DB_YET') {
         lib.runNext(this.doDaLetMeIn.bind(this), this.heartbeat*10);
         //this.reject(response.error);
         return;
-      }
+      //}
     }
     if (response.secondphase) {
       this.destroyable.secondphasesessionid = response.secondphase;
